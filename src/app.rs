@@ -14,8 +14,6 @@ pub struct TemplateApp {
     // Example stuff:
     label: String,
 
-    #[serde(skip)] // This how you opt-out of serialization of a field
-    value: f32,
 
     // Chat interface
     chat_input: String,
@@ -50,7 +48,6 @@ impl Default for TemplateApp {
         Self {
             // Example stuff:
             label: "Hello World! to".to_owned(),
-            value: 2.7,
             
             // Chat interface
             chat_input: String::new(),
@@ -259,23 +256,14 @@ impl eframe::App for TemplateApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            // The central panel the region left after adding TopPanel's and SidePanel's
-            ui.heading("eframe template");
-
-
-            ui.add(egui::Slider::new(&mut self.value, 0.0..=10.0).text("value"));
-            if ui.button("Increment").clicked() {
-                self.value += 1.0;
-            }
-
-            ui.separator();
+            // The central panel the region left after adding TopPanel's and SidePanel'
 
             // Chat history display
             ui.group(|ui| {
                 ui.heading("Chat History");
 
                 let scroll_area = egui::ScrollArea::vertical()
-                    .max_height(400.0)
+                    .max_height(600.0)
                     .auto_shrink([false, false])
                     .stick_to_bottom(true);
 
@@ -312,7 +300,7 @@ impl eframe::App for TemplateApp {
                 });
             });
 
-            ui.separator();
+            // ui.separator();
 
             // Chat input at the bottom
             ui.heading("Send Message");
@@ -456,11 +444,6 @@ impl eframe::App for TemplateApp {
             });
 
             ui.separator();
-
-            ui.add(egui::github_link_file!(
-                "https://github.com/emilk/eframe_template/blob/main/",
-                "Source code. yzw"
-            ));
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
                 powered_by_egui_and_eframe(ui);
