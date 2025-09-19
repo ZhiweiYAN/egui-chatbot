@@ -57,7 +57,7 @@ impl Default for TemplateApp {
             chat_messages: Vec::new(),
             
             // Information display
-            info_text: "DeepSeek Chat API Integration\nModel: deepseek-chat\nStreaming: Enabled".to_owned(),
+            info_text: "DeepSeek Chat API Integration\nModel: deepseek-chat\nStreaming: Enabled\n中文支持: 已启用 (Chinese Support: Enabled)".to_owned(),
             
             // API configuration
             api_base_url: "https://api.deepseek.com".to_owned(),
@@ -80,6 +80,9 @@ impl TemplateApp {
         // This is also where you can customize the look and feel of egui using
         // `cc.egui_ctx.set_visuals` and `cc.egui_ctx.set_fonts`.
 
+        // Configure fonts to support Chinese characters
+        Self::configure_fonts(&cc.egui_ctx);
+
         // Load previous app state (if any).
         // Note that you must enable the `persistence` feature for this to work.
         if let Some(storage) = cc.storage {
@@ -87,6 +90,82 @@ impl TemplateApp {
         } else {
             Default::default()
         }
+    }
+
+    fn configure_fonts(ctx: &egui::Context) {
+        let mut fonts = egui::FontDefinitions::default();
+
+        // Try to load system fonts that support Chinese characters
+        // Priority order: Microsoft YaHei, SimHei, Noto Sans CJK, fallback to built-in fonts
+
+        // On Windows, try to load Microsoft YaHei
+        if let Ok(font_data) = std::fs::read("C:\\Windows\\Fonts\\msyh.ttc") {
+            fonts.font_data.insert(
+                "Microsoft YaHei".to_owned(),
+                egui::FontData::from_owned(font_data).into(),
+            );
+
+            // Set Microsoft YaHei as the primary font
+            fonts
+                .families
+                .entry(egui::FontFamily::Proportional)
+                .or_default()
+                .insert(0, "Microsoft YaHei".to_owned());
+
+            fonts
+                .families
+                .entry(egui::FontFamily::Monospace)
+                .or_default()
+                .insert(0, "Microsoft YaHei".to_owned());
+        }
+        // Fallback: try to load other system Chinese fonts
+        else {
+            // Try macOS fonts
+            for font_path in [
+                "/System/Library/Fonts/PingFang.ttc",
+                "/System/Library/Fonts/Hiragino Sans GB.ttc",
+                "/Library/Fonts/Arial Unicode.ttf",
+            ] {
+                if let Ok(font_data) = std::fs::read(font_path) {
+                    let font_name = format!("SystemFont{}", fonts.font_data.len());
+                    fonts.font_data.insert(
+                        font_name.clone(),
+                        egui::FontData::from_owned(font_data).into(),
+                    );
+
+                    fonts
+                        .families
+                        .entry(egui::FontFamily::Proportional)
+                        .or_default()
+                        .insert(0, font_name.clone());
+                    break;
+                }
+            }
+
+            // Try Linux fonts
+            for font_path in [
+                "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+                "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+                "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            ] {
+                if let Ok(font_data) = std::fs::read(font_path) {
+                    let font_name = format!("SystemFont{}", fonts.font_data.len());
+                    fonts.font_data.insert(
+                        font_name.clone(),
+                        egui::FontData::from_owned(font_data).into(),
+                    );
+
+                    fonts
+                        .families
+                        .entry(egui::FontFamily::Proportional)
+                        .or_default()
+                        .insert(0, font_name.clone());
+                    break;
+                }
+            }
+        }
+
+        ctx.set_fonts(fonts);
     }
 
 }
@@ -202,7 +281,7 @@ impl eframe::App for TemplateApp {
 
                 scroll_area.show(ui, |ui| {
                     if self.chat_messages.is_empty() {
-                        ui.colored_label(egui::Color32::GRAY, "Start a conversation...");
+                        ui.colored_label(egui::Color32::GRAY, "开始对话... (Start a conversation...)");
                     } else {
                         for (i, message) in self.chat_messages.iter().enumerate() {
                             if message.role == "user" {
