@@ -296,7 +296,7 @@ impl TemplateApp {
         export_text
     }
 
-    pub fn start_summary_generation(&mut self, ctx: &egui::Context) {
+    pub fn start_digest_summary_generation(&mut self, ctx: &egui::Context) {
         let selected_items: Vec<&DigestItem> = self.digest_items.iter().filter(|item| item.selected).collect();
 
         if selected_items.is_empty() || self.is_waiting_response {
@@ -562,27 +562,13 @@ impl eframe::App for TemplateApp {
                 egui::widgets::global_theme_preference_buttons(ui);
             });
         });
-
-        // Render the three panels using the separate modules
-        let (digest_actions, memory_actions_from_chat) = self.render_chat_panel(ctx);
-        self.render_long_mem_panel(ctx);
-        let memory_actions_from_digest = self.render_digest_panel(ctx);
-
-        // Process all actions from both panels
-        for (content, source) in digest_actions {
-            self.add_to_digest(content, source);
-        }
-        for (content, source) in memory_actions_from_chat {
-            self.add_to_long_term_memory(content, source);
-        }
-        for (content, source) in memory_actions_from_digest {
-            self.add_to_long_term_memory(content, source);
-        }
-
         // BOTTOM PANEL: Chat Input (spans entire window width)
+        // egui::CentralPanel::default().show(ctx, |ui| {
+
         egui::TopBottomPanel::bottom("chat_input_panel")
             .min_height(60.0)
             .show(ctx, |ui| {
+                ui.add_space(4.0);
                 ui.horizontal(|ui| {
                     let input_response = ui.add_sized(
                         [ui.available_width() - 70.0, 25.0],
@@ -648,19 +634,37 @@ impl eframe::App for TemplateApp {
                     }
                 });
             });
+
+        // Render the three panels using the separate modules
+        let (digest_actions, memory_actions_from_chat) = self.render_chat_panel(ctx);
+        self.render_long_mem_panel(ctx);
+        let memory_actions_from_digest = self.render_digest_panel(ctx);
+
+        // Process all actions from both panels
+        for (content, source) in digest_actions {
+            self.add_to_digest(content, source);
+        }
+        for (content, source) in memory_actions_from_chat {
+            self.add_to_long_term_memory(content, source);
+        }
+        for (content, source) in memory_actions_from_digest {
+            self.add_to_long_term_memory(content, source);
+        }
+
+
     }
 }
 
-fn powered_by_egui_and_eframe(ui: &mut egui::Ui) {
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 0.0;
-        ui.label("Powered by ");
-        ui.hyperlink_to("egui", "https://github.com/emilk/egui");
-        ui.label(" and ");
-        ui.hyperlink_to(
-            "eframe",
-            "https://github.com/emilk/egui/tree/master/crates/eframe",
-        );
-        ui.label(".");
-    });
-}
+// fn powered_by_egui_and_eframe(ui: &mut egui::Ui) {
+//     ui.horizontal(|ui| {
+//         ui.spacing_mut().item_spacing.x = 0.0;
+//         ui.label("Powered by ");
+//         ui.hyperlink_to("egui", "https://github.com/emilk/egui");
+//         ui.label(" and ");
+//         ui.hyperlink_to(
+//             "eframe",
+//             "https://github.com/emilk/egui/tree/master/crates/eframe",
+//         );
+//         ui.label(".");
+//     });
+// }

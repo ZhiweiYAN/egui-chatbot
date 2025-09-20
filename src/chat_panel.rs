@@ -11,6 +11,7 @@ impl TemplateApp {
             .max_width(600.0)
             .resizable(true)
             .show(ctx, |ui| {
+                // ui.add_space(6.0);
                 ui.heading("💬 Chat History");
 
                 // Search box
@@ -82,10 +83,10 @@ impl TemplateApp {
                                                         }
                                                     });
                                                 });
-                                                ui.colored_label(egui::Color32::LIGHT_GREEN, &self.current_response);
+                                                ui.colored_label(egui::Color32::DARK_GREEN, &self.current_response);
                                             });
                                         } else {
-                                            ui.colored_label(egui::Color32::YELLOW, "🤖 typing...");
+                                            ui.colored_label(egui::Color32::BROWN, "🤖 typing...");
                                         }
                                     } else {
                                         ui.vertical(|ui| {

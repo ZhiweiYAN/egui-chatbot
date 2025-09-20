@@ -71,7 +71,7 @@ impl TemplateApp {
                                     ui.horizontal(|ui| {
                                         ui.checkbox(&mut self.long_term_memory_items[i].selected, "");
                                         ui.colored_label(
-                                            if self.long_term_memory_items[i].source == "user" { egui::Color32::LIGHT_BLUE } else { egui::Color32::LIGHT_GREEN },
+                                            if self.long_term_memory_items[i].source == "user" { egui::Color32::LIGHT_BLUE } else { egui::Color32::DARK_GREEN },
                                             &format!("{}:", if self.long_term_memory_items[i].source == "user" { "You" } else { "🤖 Assistant" })
                                         );
                                         ui.label(&self.long_term_memory_items[i].timestamp);
