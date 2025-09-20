@@ -61,6 +61,8 @@ pub struct TemplateApp {
     pub current_response: String,
     #[serde(skip)]
     pub should_focus_input: bool,
+    #[serde(skip)]
+    pub should_scroll_chat: bool,
 
     // Digest functionality
     pub digest_items: Vec<DigestItem>,
@@ -105,6 +107,7 @@ impl Default for TemplateApp {
             last_error: None,
             current_response: String::new(),
             should_focus_input: false,
+            should_scroll_chat: false,
 
             // Digest functionality
             digest_items: Vec::new(),
@@ -607,6 +610,7 @@ impl eframe::App for TemplateApp {
                             self.send_to_api(ctx);
                             self.chat_input.clear();
                             self.should_focus_input = true;
+                            self.should_scroll_chat = true;
                         }
                     }
 
@@ -638,6 +642,7 @@ impl eframe::App for TemplateApp {
                             self.send_to_api(ctx);
                             self.chat_input.clear();
                             self.should_focus_input = true;
+                            self.should_scroll_chat = true;
                         }
                     }
                 });

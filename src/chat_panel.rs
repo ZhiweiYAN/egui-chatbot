@@ -29,7 +29,7 @@ impl TemplateApp {
                     .auto_shrink([false, false])
                     .stick_to_bottom(true);
 
-                scroll_area.show(ui, |ui| {
+                let mut scroll_output = scroll_area.show(ui, |ui| {
                     if self.chat_messages.is_empty() {
                         ui.colored_label(egui::Color32::GRAY, "开始对话... (Start a conversation...)");
                     } else {
@@ -114,6 +114,12 @@ impl TemplateApp {
                         ui.colored_label(egui::Color32::RED, format!("Error: {}", error));
                     }
                 });
+
+                // Scroll to bottom when explicitly requested (Enter key or Send button)
+                if self.should_scroll_chat {
+                    scroll_output.state.offset.y = f32::INFINITY;
+                    self.should_scroll_chat = false;
+                }
             });
 
         (digest_actions, memory_actions)

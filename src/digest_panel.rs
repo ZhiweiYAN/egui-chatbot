@@ -30,6 +30,7 @@ impl TemplateApp {
                         .clicked()
                     {
                         self.start_digest_summary_generation(ui.ctx());
+                        self.should_scroll_chat = true;
                     }
                 });
             });
@@ -49,6 +50,7 @@ impl TemplateApp {
 
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
+                .stick_to_bottom(true)
                 .show(ui, |ui| {
                     if self.digest_items.is_empty() {
                         ui.colored_label(egui::Color32::GRAY, "No digest items yet.\nClick '📋 Digest' on chat messages to collect important content.");
