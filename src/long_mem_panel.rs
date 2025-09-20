@@ -1,4 +1,5 @@
 use crate::app::TemplateApp;
+use egui_commonmark::CommonMarkViewer;
 
 impl TemplateApp {
     pub fn render_long_mem_panel(&mut self, ctx: &egui::Context) {
@@ -84,7 +85,12 @@ impl TemplateApp {
                                             }
                                         });
                                     });
-                                    ui.label(&self.long_term_memory_items[i].content);
+                                    if self.long_term_memory_items[i].source == "user" {
+                                        ui.label(&self.long_term_memory_items[i].content);
+                                    } else {
+                                        // Render assistant messages as markdown in long term memory panel
+                                        CommonMarkViewer::new().show(ui, &mut self.markdown_cache, &self.long_term_memory_items[i].content);
+                                    }
                                     ui.add_space(5.0);
                                 }
                             }
