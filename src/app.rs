@@ -32,48 +32,48 @@ pub struct LongTermMemoryItem {
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct TemplateApp {
     // Example stuff:
-    label: String,
+    pub label: String,
 
     // Chat interface
-    chat_input: String,
-    chat_messages: Vec<ChatMessage>,
+    pub chat_input: String,
+    pub chat_messages: Vec<ChatMessage>,
 
     // Information display
-    info_text: String,
+    pub info_text: String,
 
     // API configuration
     #[serde(skip)]
-    api_base_url: String,
+    pub api_base_url: String,
     #[serde(skip)]
-    api_key: String,
+    pub api_key: String,
     #[serde(skip)]
-    model: String,
+    pub model: String,
 
     // Streaming state
     #[serde(skip)]
-    streaming_receiver: Option<mpsc::Receiver<String>>,
+    pub streaming_receiver: Option<mpsc::Receiver<String>>,
     #[serde(skip)]
-    is_waiting_response: bool,
+    pub is_waiting_response: bool,
     #[serde(skip)]
-    last_error: Option<String>,
+    pub last_error: Option<String>,
     #[serde(skip)]
-    current_response: String,
+    pub current_response: String,
     #[serde(skip)]
-    should_focus_input: bool,
+    pub should_focus_input: bool,
 
     // Digest functionality
-    digest_items: Vec<DigestItem>,
+    pub digest_items: Vec<DigestItem>,
     #[serde(skip)]
-    selected_text: String,
+    pub selected_text: String,
     #[serde(skip)]
-    digest_search: String,
+    pub digest_search: String,
     #[serde(skip)]
-    chat_search: String,
+    pub chat_search: String,
 
     // Long term memory functionality
-    long_term_memory_items: Vec<LongTermMemoryItem>,
+    pub long_term_memory_items: Vec<LongTermMemoryItem>,
     #[serde(skip)]
-    memory_search: String,
+    pub memory_search: String,
 }
 
 impl Default for TemplateApp {
@@ -208,7 +208,7 @@ impl TemplateApp {
         ctx.set_fonts(fonts);
     }
 
-    fn add_to_digest(&mut self, content: String, source: String) {
+    pub fn add_to_digest(&mut self, content: String, source: String) {
         use std::time::{SystemTime, UNIX_EPOCH};
 
         let timestamp = SystemTime::now()
@@ -233,7 +233,7 @@ impl TemplateApp {
         self.digest_items.push(digest_item);
     }
 
-    fn add_to_long_term_memory(&mut self, content: String, source: String) {
+    pub fn add_to_long_term_memory(&mut self, content: String, source: String) {
         use std::time::{SystemTime, UNIX_EPOCH};
 
         let timestamp = SystemTime::now()
@@ -258,7 +258,7 @@ impl TemplateApp {
         self.long_term_memory_items.push(memory_item);
     }
 
-    fn export_digest_items(&self) -> String {
+    pub fn export_digest_items(&self) -> String {
         let mut export_text = String::new();
         export_text.push_str("# Digested Content Export\n\n");
 
@@ -277,7 +277,7 @@ impl TemplateApp {
         export_text
     }
 
-    fn export_memory_items(&self) -> String {
+    pub fn export_memory_items(&self) -> String {
         let mut export_text = String::new();
         export_text.push_str("# Long Term Memory Export\n\n");
 
@@ -296,7 +296,7 @@ impl TemplateApp {
         export_text
     }
 
-    fn start_summary_generation(&mut self, ctx: &egui::Context) {
+    pub fn start_summary_generation(&mut self, ctx: &egui::Context) {
         let selected_items: Vec<&DigestItem> = self.digest_items.iter().filter(|item| item.selected).collect();
 
         if selected_items.is_empty() || self.is_waiting_response {
@@ -334,107 +334,10 @@ impl TemplateApp {
         self.current_response.clear();
 
         // Send to API using the same chat API logic
-        let api_base_url = self.api_base_url.clone();
-        let api_key = self.api_key.clone();
-        let model = self.model.clone();
-        let messages = self.chat_messages.clone();
-        let ctx_clone = ctx.clone();
-
-        let (tx, rx) = mpsc::channel();
-        self.streaming_receiver = Some(rx);
-
-        tokio::spawn(async move {
-            let client = reqwest::Client::new();
-            let api_url = format!("{}/chat/completions", api_base_url);
-
-            let mut api_messages = Vec::new();
-            for msg in &messages {
-                if !msg.content.is_empty() {
-                    api_messages.push(serde_json::json!({
-                        "role": msg.role,
-                        "content": msg.content
-                    }));
-                }
-            }
-
-            let payload = serde_json::json!({
-                "model": model,
-                "messages": api_messages,
-                "stream": true,
-                "temperature": 0.3
-            });
-
-            match client
-                .post(&api_url)
-                .header("Authorization", format!("Bearer {}", api_key))
-                .header("Content-Type", "application/json")
-                .json(&payload)
-                .send()
-                .await
-            {
-                Ok(resp) => {
-                    if resp.status().is_success() {
-                        let mut stream = resp.bytes_stream();
-                        let mut buffer = String::new();
-
-                        while let Some(chunk_result) = stream.next().await {
-                            match chunk_result {
-                                Ok(chunk) => {
-                                    let chunk_str = String::from_utf8_lossy(&chunk);
-                                    buffer.push_str(&chunk_str);
-
-                                    let lines: Vec<String> = buffer.split('\n').map(|s| s.to_string()).collect();
-                                    let processed_lines: Vec<String> = lines[..lines.len().saturating_sub(1)].to_vec();
-                                    buffer = lines.last().cloned().unwrap_or_default();
-
-                                    for line in processed_lines {
-                                        if line.starts_with("data: ") {
-                                            let data = &line[6..];
-                                            if data == "[DONE]" {
-                                                let _ = tx.send("__STREAM_END__".to_string());
-                                                ctx_clone.request_repaint();
-                                                return;
-                                            }
-
-                                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
-                                                if let Some(choices) = json["choices"].as_array() {
-                                                    if let Some(choice) = choices.first() {
-                                                        if let Some(delta) = choice["delta"].as_object() {
-                                                            if let Some(content) = delta["content"].as_str() {
-                                                                if let Err(_e) = tx.send(content.to_string()) {
-                                                                } else {
-                                                                }
-                                                                ctx_clone.request_repaint();
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                Err(_) => break,
-                            }
-                        }
-                    } else {
-                        let status = resp.status();
-                        let error_body = match resp.text().await {
-                            Ok(body) => body,
-                            Err(_) => "Unknown error".to_string(),
-                        };
-                        let _ = tx.send(format!("Error: HTTP {} - {}", status, error_body));
-                        ctx_clone.request_repaint();
-                    }
-                }
-                Err(e) => {
-                    let _ = tx.send(format!("Connection error: {}", e));
-                    ctx_clone.request_repaint();
-                }
-            }
-        });
+        self.send_to_api(ctx);
     }
 
-    fn start_memory_summary_generation(&mut self, ctx: &egui::Context) {
+    pub fn start_memory_summary_generation(&mut self, ctx: &egui::Context) {
         let selected_items: Vec<&LongTermMemoryItem> = self.long_term_memory_items.iter().filter(|item| item.selected).collect();
 
         if selected_items.is_empty() || self.is_waiting_response {
@@ -472,6 +375,10 @@ impl TemplateApp {
         self.current_response.clear();
 
         // Send to API using the same chat API logic
+        self.send_to_api(ctx);
+    }
+
+    fn send_to_api(&mut self, ctx: &egui::Context) {
         let api_base_url = self.api_base_url.clone();
         let api_key = self.api_key.clone();
         let model = self.model.clone();
@@ -656,351 +563,21 @@ impl eframe::App for TemplateApp {
             });
         });
 
-        // LEFT PANEL: Chat History
-        egui::SidePanel::left("chat_history")
-            .default_width(400.0)
-            .min_width(300.0)
-            .max_width(600.0)
-            .resizable(true)
-            .show(ctx, |ui| {
-                ui.heading("💬 Chat History");
+        // Render the three panels using the separate modules
+        let (digest_actions, memory_actions_from_chat) = self.render_chat_panel(ctx);
+        self.render_long_mem_panel(ctx);
+        let memory_actions_from_digest = self.render_digest_panel(ctx);
 
-                // Search box
-                ui.horizontal(|ui| {
-                    ui.label("🔍");
-                    ui.text_edit_singleline(&mut self.chat_search)
-                        .on_hover_text("Search chat messages");
-                    if ui.small_button("✖").on_hover_text("Clear search").clicked() {
-                        self.chat_search.clear();
-                    }
-                });
-                ui.separator();
-
-                let scroll_area = egui::ScrollArea::vertical()
-                    .auto_shrink([false, false])
-                    .stick_to_bottom(true);
-
-                let mut digest_actions: Vec<(String, String)> = Vec::new();
-                let mut memory_actions: Vec<(String, String)> = Vec::new();
-
-                scroll_area.show(ui, |ui| {
-                    if self.chat_messages.is_empty() {
-                        ui.colored_label(egui::Color32::GRAY, "开始对话... (Start a conversation...)");
-                    } else {
-                        let search_term = self.chat_search.to_lowercase();
-                        let filtered_indices: Vec<usize> = self.chat_messages
-                            .iter()
-                            .enumerate()
-                            .filter(|(_, message)| {
-                                if search_term.is_empty() {
-                                    true
-                                } else {
-                                    message.content.to_lowercase().contains(&search_term) ||
-                                    message.role.to_lowercase().contains(&search_term)
-                                }
-                            })
-                            .map(|(i, _)| i)
-                            .collect();
-
-                        if filtered_indices.is_empty() && !search_term.is_empty() {
-                            ui.colored_label(egui::Color32::GRAY, "No messages match your search.");
-                        } else {
-                            for i in filtered_indices {
-                                let message = &self.chat_messages[i];
-                                if message.role == "user" {
-                                    ui.vertical(|ui| {
-                                        ui.horizontal(|ui| {
-                                            ui.colored_label(egui::Color32::LIGHT_BLUE, "You:");
-                                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                                if ui.small_button("M Memory").clicked() {
-                                                    memory_actions.push((message.content.clone(), message.role.clone()));
-                                                }
-                                                if ui.button("📋 Digest").clicked() {
-                                                    digest_actions.push((message.content.clone(), message.role.clone()));
-                                                }
-                                            });
-                                        });
-                                        ui.label(&message.content);
-                                    });
-                                } else if message.role == "assistant" {
-                                    if i == self.chat_messages.len() - 1 && self.is_waiting_response {
-                                        // Show streaming response for the last assistant message
-                                        if !self.current_response.is_empty() {
-                                            ui.vertical(|ui| {
-                                                ui.horizontal(|ui| {
-                                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                                        if ui.small_button("M Memory").clicked() {
-                                                            memory_actions.push((self.current_response.clone(), "assistant".to_string()));
-                                                        }
-                                                        if ui.button("📋 Digest").clicked() {
-                                                            digest_actions.push((self.current_response.clone(), "assistant".to_string()));
-                                                        }
-                                                    });
-                                                });
-                                                ui.colored_label(egui::Color32::LIGHT_GREEN, &self.current_response);
-                                            });
-                                        } else {
-                                            ui.colored_label(egui::Color32::YELLOW, "🤖 typing...");
-                                        }
-                                    } else {
-                                        ui.vertical(|ui| {
-                                            ui.horizontal(|ui| {
-                                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                                    if ui.small_button("M Memory").clicked() {
-                                                        memory_actions.push((message.content.clone(), message.role.clone()));
-                                                    }
-                                                    if ui.button("📋 Digest").clicked() {
-                                                        digest_actions.push((message.content.clone(), message.role.clone()));
-                                                    }
-                                                });
-                                            });
-                                            ui.label(&message.content);
-                                        });
-                                    }
-                                    // Add spacing after assistant response (end of conversation turn)
-                                    ui.add_space(8.0);
-                                }
-                            }
-                        }
-                    }
-
-                    if let Some(error) = &self.last_error {
-                        ui.colored_label(egui::Color32::RED, format!("Error: {}", error));
-                    }
-                });
-
-                // Process digest and memory actions after the scroll area
-                for (content, source) in digest_actions {
-                    self.add_to_digest(content, source);
-                }
-                for (content, source) in memory_actions {
-                    self.add_to_long_term_memory(content, source);
-                }
-            });
-
-        // RIGHT PANEL: Long Term Memory
-        egui::SidePanel::right("long_term_memory")
-            .default_width(350.0)
-            .min_width(250.0)
-            .max_width(500.0)
-            .resizable(true)
-            .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.heading("M Long Term Memory");
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let selected_count = self.long_term_memory_items.iter().filter(|item| item.selected).count();
-                        let summary_enabled = selected_count > 0 && !self.is_waiting_response;
-                        let button_text = if self.is_waiting_response {
-                            "🤖 Processing...".to_string()
-                        } else if selected_count > 0 {
-                            format!("📄 Summary ({})", selected_count)
-                        } else {
-                            "📄 Summary".to_string()
-                        };
-
-                        if ui.add_enabled(summary_enabled, egui::Button::new(button_text))
-                            .on_hover_text("Generate a summary of selected memory items and show in chat")
-                            .clicked()
-                        {
-                            self.start_memory_summary_generation(ui.ctx());
-                        }
-                    });
-                });
-
-                // Search box
-                ui.horizontal(|ui| {
-                    ui.label("🔍");
-                    ui.text_edit_singleline(&mut self.memory_search)
-                        .on_hover_text("Search memory items");
-                    if ui.small_button("✖").on_hover_text("Clear search").clicked() {
-                        self.memory_search.clear();
-                    }
-                });
-                ui.separator();
-
-                let mut item_to_delete: Option<usize> = None;
-
-                egui::ScrollArea::vertical()
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        if self.long_term_memory_items.is_empty() {
-                            ui.colored_label(egui::Color32::GRAY, "No memory items yet.\nClick '🧠 Memory' on chat messages to store important content.");
-                        } else {
-                            let search_term = self.memory_search.to_lowercase();
-                            let filtered_indices: Vec<usize> = self.long_term_memory_items
-                                .iter()
-                                .enumerate()
-                                .filter(|(_, item)| {
-                                    if search_term.is_empty() {
-                                        true
-                                    } else {
-                                        item.content.to_lowercase().contains(&search_term) ||
-                                        item.source.to_lowercase().contains(&search_term)
-                                    }
-                                })
-                                .map(|(i, _)| i)
-                                .collect();
-
-                            if filtered_indices.is_empty() && !search_term.is_empty() {
-                                ui.colored_label(egui::Color32::GRAY, "No items match your search.");
-                            } else {
-                                for i in filtered_indices {
-                                    ui.horizontal(|ui| {
-                                        ui.checkbox(&mut self.long_term_memory_items[i].selected, "");
-                                        ui.colored_label(
-                                            if self.long_term_memory_items[i].source == "user" { egui::Color32::LIGHT_BLUE } else { egui::Color32::LIGHT_GREEN },
-                                            &format!("{}:", if self.long_term_memory_items[i].source == "user" { "You" } else { "🤖 Assistant" })
-                                        );
-                                        ui.label(&self.long_term_memory_items[i].timestamp);
-                                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                            if ui.small_button("🗑").on_hover_text("Delete item").clicked() {
-                                                item_to_delete = Some(i);
-                                            }
-                                            if ui.small_button("📋").on_hover_text("Copy to clipboard").clicked() {
-                                                ui.ctx().copy_text(self.long_term_memory_items[i].content.clone());
-                                            }
-                                        });
-                                    });
-                                    ui.label(&self.long_term_memory_items[i].content);
-                                    ui.add_space(5.0);
-                                }
-                            }
-                        }
-                    });
-
-                if let Some(index) = item_to_delete {
-                    self.long_term_memory_items.remove(index);
-                }
-
-                ui.separator();
-
-                ui.horizontal(|ui| {
-                    if ui.button("Clear All").clicked() && !self.long_term_memory_items.is_empty() {
-                        self.long_term_memory_items.clear();
-                    }
-                    if ui.button("Export All").clicked() && !self.long_term_memory_items.is_empty() {
-                        let export_text = self.export_memory_items();
-                        ui.ctx().copy_text(export_text);
-                    }
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(format!("Items: {}", self.long_term_memory_items.len()));
-                    });
-                });
-            });
-
-        // CENTER PANEL: Digest Content
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.heading("📋 Digested Content");
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let selected_count = self.digest_items.iter().filter(|item| item.selected).count();
-                    let summary_enabled = selected_count > 0 && !self.is_waiting_response;
-                    let button_text = if self.is_waiting_response {
-                        "🤖 Processing...".to_string()
-                    } else if selected_count > 0 {
-                        format!("📄 Summary ({})", selected_count)
-                    } else {
-                        "📄 Summary".to_string()
-                    };
-
-                    if ui.add_enabled(summary_enabled, egui::Button::new(button_text))
-                        .on_hover_text("Generate a summary of selected digest items and show in chat")
-                        .clicked()
-                    {
-                        self.start_summary_generation(ui.ctx());
-                    }
-                });
-            });
-
-            // Search box
-            ui.horizontal(|ui| {
-                ui.label("🔍");
-                ui.text_edit_singleline(&mut self.digest_search)
-                    .on_hover_text("Search digest items");
-                if ui.small_button("✖").on_hover_text("Clear search").clicked() {
-                    self.digest_search.clear();
-                }
-            });
-            ui.separator();
-
-            let mut item_to_delete: Option<usize> = None;
-            let mut memory_actions: Vec<(String, String)> = Vec::new();
-
-            egui::ScrollArea::vertical()
-                .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    if self.digest_items.is_empty() {
-                        ui.colored_label(egui::Color32::GRAY, "No digest items yet.\nClick '📋 Digest' on chat messages to collect important content.");
-                    } else {
-                        let search_term = self.digest_search.to_lowercase();
-                        let filtered_indices: Vec<usize> = self.digest_items
-                            .iter()
-                            .enumerate()
-                            .filter(|(_, item)| {
-                                if search_term.is_empty() {
-                                    true
-                                } else {
-                                    item.content.to_lowercase().contains(&search_term) ||
-                                    item.source.to_lowercase().contains(&search_term)
-                                }
-                            })
-                            .map(|(i, _)| i)
-                            .collect();
-
-                        if filtered_indices.is_empty() && !search_term.is_empty() {
-                            ui.colored_label(egui::Color32::GRAY, "No items match your search.");
-                        } else {
-                            for i in filtered_indices {
-                                ui.horizontal(|ui| {
-                                    ui.checkbox(&mut self.digest_items[i].selected, "");
-                                    ui.colored_label(
-                                        if self.digest_items[i].source == "user" { egui::Color32::LIGHT_BLUE } else { egui::Color32::LIGHT_GREEN },
-                                        &format!("{}:", if self.digest_items[i].source == "user" { "You" } else { "🤖 Assistant" })
-                                    );
-                                    ui.label(&self.digest_items[i].timestamp);
-                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                        if ui.small_button("🗑").on_hover_text("Delete item").clicked() {
-                                            item_to_delete = Some(i);
-                                        }
-                                        if ui.small_button("M").on_hover_text("Copy to Long Term Memory").clicked() {
-                                            memory_actions.push((self.digest_items[i].content.clone(), self.digest_items[i].source.clone()));
-                                        }
-                                        if ui.small_button("📋").on_hover_text("Copy to clipboard").clicked() {
-                                            ui.ctx().copy_text(self.digest_items[i].content.clone());
-                                        }
-                                    });
-                                });
-                                ui.label(&self.digest_items[i].content);
-                                ui.add_space(5.0);
-                            }
-                        }
-                    }
-                });
-
-            // Process memory actions after the scroll area
-            for (content, source) in memory_actions {
-                self.add_to_long_term_memory(content, source);
-            }
-
-            if let Some(index) = item_to_delete {
-                self.digest_items.remove(index);
-            }
-
-            ui.separator();
-
-            ui.horizontal(|ui| {
-                if ui.button("Clear All").clicked() && !self.digest_items.is_empty() {
-                    self.digest_items.clear();
-                }
-                if ui.button("Export All").clicked() && !self.digest_items.is_empty() {
-                    let export_text = self.export_digest_items();
-                    ui.ctx().copy_text(export_text);
-                }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(format!("Items: {}", self.digest_items.len()));
-                });
-            });
-        });
+        // Process all actions from both panels
+        for (content, source) in digest_actions {
+            self.add_to_digest(content, source);
+        }
+        for (content, source) in memory_actions_from_chat {
+            self.add_to_long_term_memory(content, source);
+        }
+        for (content, source) in memory_actions_from_digest {
+            self.add_to_long_term_memory(content, source);
+        }
 
         // BOTTOM PANEL: Chat Input (spans entire window width)
         egui::TopBottomPanel::bottom("chat_input_panel")
@@ -1033,106 +610,7 @@ impl eframe::App for TemplateApp {
                             self.is_waiting_response = true;
                             self.current_response.clear();
 
-                            // Start API call
-                            let api_base_url = self.api_base_url.clone();
-                            let api_key = self.api_key.clone();
-                            let model = self.model.clone();
-                            let messages = self.chat_messages.clone();
-                            let ctx_clone = ctx.clone();
-
-                            let (tx, rx) = mpsc::channel();
-                            self.streaming_receiver = Some(rx);
-
-                            tokio::spawn(async move {
-                                let client = reqwest::Client::new();
-                                let api_url = format!("{}/chat/completions", api_base_url);
-
-                                let mut api_messages = Vec::new();
-                                for msg in &messages {
-                                    if !msg.content.is_empty() {
-                                        api_messages.push(serde_json::json!({
-                                            "role": msg.role,
-                                            "content": msg.content
-                                        }));
-                                    }
-                                }
-
-                                let payload = serde_json::json!({
-                                    "model": model,
-                                    "messages": api_messages,
-                                    "stream": true,
-                                    "temperature": 0.7
-                                });
-
-                                match client
-                                    .post(&api_url)
-                                    .header("Authorization", format!("Bearer {}", api_key))
-                                    .header("Content-Type", "application/json")
-                                    .json(&payload)
-                                    .send()
-                                    .await
-                                {
-                                    Ok(resp) => {
-                                        if resp.status().is_success() {
-                                            let mut stream = resp.bytes_stream();
-                                            let mut buffer = String::new();
-
-                                            while let Some(chunk_result) = stream.next().await {
-                                                match chunk_result {
-                                                    Ok(chunk) => {
-                                                        let chunk_str = String::from_utf8_lossy(&chunk);
-                                                        buffer.push_str(&chunk_str);
-
-                                                        let lines: Vec<String> = buffer.split('\n').map(|s| s.to_string()).collect();
-                                                        let processed_lines: Vec<String> = lines[..lines.len().saturating_sub(1)].to_vec();
-                                                        buffer = lines.last().cloned().unwrap_or_default();
-
-                                                        for line in processed_lines {
-                                                            if line.starts_with("data: ") {
-                                                                let data = &line[6..];
-                                                                if data == "[DONE]" {
-                                                                    let _ = tx.send("__STREAM_END__".to_string());
-                                                                    ctx_clone.request_repaint();
-                                                                    return;
-                                                                }
-
-                                                                if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
-                                                                    if let Some(choices) = json["choices"].as_array() {
-                                                                        if let Some(choice) = choices.first() {
-                                                                            if let Some(delta) = choice["delta"].as_object() {
-                                                                                if let Some(content) = delta["content"].as_str() {
-                                                                                    if let Err(_e) = tx.send(content.to_string()) {
-                                                                                    } else {
-                                                                                    }
-                                                                                    ctx_clone.request_repaint();
-                                                                                }
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                    Err(_) => break,
-                                                }
-                                            }
-                                        } else {
-                                            let status = resp.status();
-                                            let error_body = match resp.text().await {
-                                                Ok(body) => body,
-                                                Err(_) => "Unknown error".to_string(),
-                                            };
-                                            let _ = tx.send(format!("Error: HTTP {} - {}", status, error_body));
-                                            ctx_clone.request_repaint();
-                                        }
-                                    }
-                                    Err(e) => {
-                                        let _ = tx.send(format!("Connection error: {}", e));
-                                        ctx_clone.request_repaint();
-                                    }
-                                }
-                            });
-
+                            self.send_to_api(ctx);
                             self.chat_input.clear();
                             self.should_focus_input = true;
                         }
@@ -1163,106 +641,7 @@ impl eframe::App for TemplateApp {
                             self.is_waiting_response = true;
                             self.current_response.clear();
 
-                            // Start API call (same as above)
-                            let api_base_url = self.api_base_url.clone();
-                            let api_key = self.api_key.clone();
-                            let model = self.model.clone();
-                            let messages = self.chat_messages.clone();
-                            let ctx_clone = ctx.clone();
-
-                            let (tx, rx) = mpsc::channel();
-                            self.streaming_receiver = Some(rx);
-
-                            tokio::spawn(async move {
-                                let client = reqwest::Client::new();
-                                let api_url = format!("{}/chat/completions", api_base_url);
-
-                                let mut api_messages = Vec::new();
-                                for msg in &messages {
-                                    if !msg.content.is_empty() {
-                                        api_messages.push(serde_json::json!({
-                                            "role": msg.role,
-                                            "content": msg.content
-                                        }));
-                                    }
-                                }
-
-                                let payload = serde_json::json!({
-                                    "model": model,
-                                    "messages": api_messages,
-                                    "stream": true,
-                                    "temperature": 0.7
-                                });
-
-                                match client
-                                    .post(&api_url)
-                                    .header("Authorization", format!("Bearer {}", api_key))
-                                    .header("Content-Type", "application/json")
-                                    .json(&payload)
-                                    .send()
-                                    .await
-                                {
-                                    Ok(resp) => {
-                                        if resp.status().is_success() {
-                                            let mut stream = resp.bytes_stream();
-                                            let mut buffer = String::new();
-
-                                            while let Some(chunk_result) = stream.next().await {
-                                                match chunk_result {
-                                                    Ok(chunk) => {
-                                                        let chunk_str = String::from_utf8_lossy(&chunk);
-                                                        buffer.push_str(&chunk_str);
-
-                                                        let lines: Vec<String> = buffer.split('\n').map(|s| s.to_string()).collect();
-                                                        let processed_lines: Vec<String> = lines[..lines.len().saturating_sub(1)].to_vec();
-                                                        buffer = lines.last().cloned().unwrap_or_default();
-
-                                                        for line in processed_lines {
-                                                            if line.starts_with("data: ") {
-                                                                let data = &line[6..];
-                                                                if data == "[DONE]" {
-                                                                    let _ = tx.send("__STREAM_END__".to_string());
-                                                                    ctx_clone.request_repaint();
-                                                                    return;
-                                                                }
-
-                                                                if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
-                                                                    if let Some(choices) = json["choices"].as_array() {
-                                                                        if let Some(choice) = choices.first() {
-                                                                            if let Some(delta) = choice["delta"].as_object() {
-                                                                                if let Some(content) = delta["content"].as_str() {
-                                                                                    if let Err(_e) = tx.send(content.to_string()) {
-                                                                                    } else {
-                                                                                    }
-                                                                                    ctx_clone.request_repaint();
-                                                                                }
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                    Err(_) => break,
-                                                }
-                                            }
-                                        } else {
-                                            let status = resp.status();
-                                            let error_body = match resp.text().await {
-                                                Ok(body) => body,
-                                                Err(_) => "Unknown error".to_string(),
-                                            };
-                                            let _ = tx.send(format!("Error: HTTP {} - {}", status, error_body));
-                                            ctx_clone.request_repaint();
-                                        }
-                                    }
-                                    Err(e) => {
-                                        let _ = tx.send(format!("Connection error: {}", e));
-                                        ctx_clone.request_repaint();
-                                    }
-                                }
-                            });
-
+                            self.send_to_api(ctx);
                             self.chat_input.clear();
                             self.should_focus_input = true;
                         }
