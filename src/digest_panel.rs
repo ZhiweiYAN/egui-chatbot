@@ -1,4 +1,5 @@
 use crate::app::TemplateApp;
+use egui_commonmark::CommonMarkViewer;
 
 impl TemplateApp {
     pub fn render_digest_panel(&mut self, ctx: &egui::Context) -> Vec<(String, String)> {
@@ -90,7 +91,12 @@ impl TemplateApp {
                                         }
                                     });
                                 });
-                                ui.label(&self.digest_items[i].content);
+                                if self.digest_items[i].source == "user" {
+                                    ui.label(&self.digest_items[i].content);
+                                } else {
+                                    // Render assistant messages as markdown in digest panel
+                                    CommonMarkViewer::new().show(ui, &mut self.markdown_cache, &self.digest_items[i].content);
+                                }
                                 ui.add_space(5.0);
                             }
                         }

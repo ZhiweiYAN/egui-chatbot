@@ -1,5 +1,6 @@
 use std::sync::mpsc;
 use futures::StreamExt;
+use egui_commonmark::CommonMarkCache;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct ChatMessage {
@@ -74,6 +75,10 @@ pub struct TemplateApp {
     pub long_term_memory_items: Vec<LongTermMemoryItem>,
     #[serde(skip)]
     pub memory_search: String,
+
+    // Markdown cache for digest panel
+    #[serde(skip)]
+    pub markdown_cache: CommonMarkCache,
 }
 
 impl Default for TemplateApp {
@@ -110,6 +115,9 @@ impl Default for TemplateApp {
             // Long term memory functionality
             long_term_memory_items: Vec::new(),
             memory_search: String::new(),
+
+            // Markdown cache for digest panel
+            markdown_cache: CommonMarkCache::default(),
         }
     }
 }
