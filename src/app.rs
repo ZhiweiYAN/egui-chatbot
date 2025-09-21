@@ -563,7 +563,7 @@ impl TemplateApp {
 
         content_to_summarize.push_str("Please provide a clear, structured summary that captures the key points, main topics discussed, and important conclusions from the above content.");
 
-        // Add user message for summary request
+        // Add user message for summary request to chat history
         self.chat_messages.push(ChatMessage {
             role: "user".to_string(),
             content: content_to_summarize.clone(),
@@ -578,8 +578,8 @@ impl TemplateApp {
         self.is_waiting_response = true;
         self.current_response.clear();
 
-        // Send to API using digest panel system prompt
-        self.send_to_api_with_panel("digest", ctx);
+        // Send ONLY the summary request to API (not full chat history)
+        self.send_summary_to_api("digest", content_to_summarize, ctx);
     }
 
     pub fn start_memory_summary_generation(&mut self, ctx: &egui::Context) {
@@ -630,12 +630,119 @@ impl TemplateApp {
         self.is_waiting_response = true;
         self.current_response.clear();
 
-        // Send to API using memory panel system prompt
-        self.send_to_api_with_panel("memory", ctx);
+        // Send ONLY the summary request to API (not full chat history)
+        self.send_summary_to_api("memory", content_to_summarize, ctx);
     }
 
     fn send_to_api(&mut self, ctx: &egui::Context) {
         self.send_to_api_with_panel("chat", ctx);
+    }
+
+    fn send_summary_to_api(&mut self, panel_type: &str, summary_content: String, ctx: &egui::Context) {
+        let api_base_url = self.api_base_url.clone();
+        let api_key = self.api_key.clone();
+        let model = self.model.clone();
+        let system_prompt = self.current_system_prompts.get(panel_type).cloned();
+        let ctx_clone = ctx.clone();
+
+        let (tx, rx) = mpsc::channel();
+        self.streaming_receiver = Some(rx);
+
+        tokio::spawn(async move {
+            let client = reqwest::Client::new();
+            let api_url = format!("{}/chat/completions", api_base_url);
+
+            let mut api_messages = Vec::new();
+
+            // Add system prompt if available
+            if let Some(system_prompt) = system_prompt {
+                api_messages.push(serde_json::json!({
+                    "role": "system",
+                    "content": system_prompt
+                }));
+            }
+
+            // Add ONLY the summary request (no chat history)
+            api_messages.push(serde_json::json!({
+                "role": "user",
+                "content": summary_content
+            }));
+
+            let payload = serde_json::json!({
+                "model": model,
+                "messages": api_messages,
+                "stream": true,
+                "temperature": 0.3
+            });
+
+            // Debug: Print the HTTP body being sent to LLM
+            println!("🔍 DEBUG - Summary HTTP Body sent to LLM API:");
+            println!("{}", serde_json::to_string_pretty(&payload).unwrap_or_else(|_| "Failed to serialize payload".to_string()));
+            println!("─────────────────────────────────────");
+
+            match client
+                .post(&api_url)
+                .header("Authorization", format!("Bearer {}", api_key))
+                .header("Content-Type", "application/json")
+                .json(&payload)
+                .send()
+                .await
+            {
+                Ok(resp) => {
+                    if resp.status().is_success() {
+                        let mut stream = resp.bytes_stream();
+                        let mut buffer = String::new();
+
+                        while let Some(chunk_result) = stream.next().await {
+                            match chunk_result {
+                                Ok(chunk) => {
+                                    let chunk_str = String::from_utf8_lossy(&chunk);
+                                    buffer.push_str(&chunk_str);
+
+                                    // Process complete lines
+                                    while let Some(line_end) = buffer.find('\n') {
+                                        let line = buffer[..line_end].trim().to_string();
+                                        buffer = buffer[line_end + 1..].to_string();
+
+                                        if line.starts_with("data: ") {
+                                            let data = &line[6..];
+                                            if data == "[DONE]" {
+                                                let _ = tx.send("__STREAM_END__".to_string());
+                                                ctx_clone.request_repaint();
+                                                return;
+                                            }
+
+                                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
+                                                if let Some(choices) = json["choices"].as_array() {
+                                                    if let Some(choice) = choices.first() {
+                                                        if let Some(delta) = choice["delta"].as_object() {
+                                                            if let Some(content) = delta["content"].as_str() {
+                                                                let _ = tx.send(content.to_string());
+                                                                ctx_clone.request_repaint();
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                Err(_) => break,
+                            }
+                        }
+                    } else {
+                        let error_msg = format!("HTTP error: {}", resp.status());
+                        let _ = tx.send(error_msg);
+                        ctx_clone.request_repaint();
+                    }
+                }
+                Err(e) => {
+                    let error_msg = format!("Connection error: {}", e);
+                    let _ = tx.send(error_msg);
+                    ctx_clone.request_repaint();
+                }
+            }
+        });
     }
 
     fn send_to_api_with_panel(&mut self, panel_type: &str, ctx: &egui::Context) {
@@ -679,6 +786,11 @@ impl TemplateApp {
                 "stream": true,
                 "temperature": 0.3
             });
+
+            // Debug: Print the HTTP body being sent to LLM
+            println!("🔍 DEBUG - HTTP Body sent to LLM API:");
+            println!("{}", serde_json::to_string_pretty(&payload).unwrap_or_else(|_| "Failed to serialize payload".to_string()));
+            println!("─────────────────────────────────────");
 
             match client
                 .post(&api_url)
