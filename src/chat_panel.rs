@@ -67,13 +67,13 @@ impl TemplateApp {
                                             ui.with_layout(
                                                 egui::Layout::right_to_left(egui::Align::Center),
                                                 |ui| {
-                                                    if ui.small_button("M Memory").clicked() {
+                                                    if ui.small_button("🗄 Memory").clicked() {
                                                         memory_actions.push((
                                                             message.content.clone(),
                                                             message.role.clone(),
                                                         ));
                                                     }
-                                                    if ui.button("📋 Digest").clicked() {
+                                                    if ui.button("📌 Digest").clicked() {
                                                         digest_actions.push((
                                                             message.content.clone(),
                                                             message.role.clone(),
@@ -96,14 +96,14 @@ impl TemplateApp {
                                                             egui::Align::Center,
                                                         ),
                                                         |ui| {
-                                                            if ui.small_button("M Memory").clicked()
+                                                            if ui.small_button("🗄 Memory").clicked()
                                                             {
                                                                 memory_actions.push((
                                                                     self.current_response.clone(),
                                                                     "assistant".to_string(),
                                                                 ));
                                                             }
-                                                            if ui.button("📋 Digest").clicked() {
+                                                            if ui.button("📌 Digest").clicked() {
                                                                 digest_actions.push((
                                                                     self.current_response.clone(),
                                                                     "assistant".to_string(),
@@ -118,7 +118,7 @@ impl TemplateApp {
                                                 );
                                             });
                                         } else {
-                                            ui.colored_label(egui::Color32::BROWN, "🤖 typing...");
+                                            ui.colored_label(egui::Color32::BROWN, "🖊 typing...");
                                         }
                                     } else {
                                         ui.vertical(|ui| {
@@ -128,13 +128,13 @@ impl TemplateApp {
                                                         egui::Align::Center,
                                                     ),
                                                     |ui| {
-                                                        if ui.small_button("M Memory").clicked() {
+                                                        if ui.small_button("🗄 Memory").clicked() {
                                                             memory_actions.push((
                                                                 message.content.clone(),
                                                                 message.role.clone(),
                                                             ));
                                                         }
-                                                        if ui.button("📋 Digest").clicked() {
+                                                        if ui.button("📌 Digest").clicked() {
                                                             digest_actions.push((
                                                                 message.content.clone(),
                                                                 message.role.clone(),

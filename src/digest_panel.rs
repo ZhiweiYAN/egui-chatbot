@@ -6,19 +6,14 @@ impl TemplateApp {
         let mut memory_actions = Vec::new();
 
         egui::CentralPanel::default().show(ctx, |ui| {
-        // egui::SidePanel::left("long_term_memory")
-        // .default_width(400.0)
-        // .min_width(300.0)
-        // .max_width(600.0)
-        //     .show(ctx, |ui| {
-
+            ui.add_space(-6.0);
             ui.horizontal(|ui| {
-                ui.heading("📋 Digested Content");
+                ui.heading("📌 Digested Content");
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let selected_count = self.digest_items.iter().filter(|item| item.selected).count();
                     let summary_enabled = selected_count > 0 && !self.is_waiting_response;
                     let button_text = if self.is_waiting_response {
-                        "🤖 Processing...".to_string()
+                        "LLM Processing...".to_string()
                     } else if selected_count > 0 {
                         format!("📄 Summary ({})", selected_count)
                     } else {
@@ -78,7 +73,7 @@ impl TemplateApp {
                                     ui.checkbox(&mut self.digest_items[i].selected, "");
                                     ui.colored_label(
                                         if self.digest_items[i].source == "user" { egui::Color32::LIGHT_BLUE } else { egui::Color32::DARK_GREEN },
-                                        &format!("{}:", if self.digest_items[i].source == "user" { "You" } else { "🤖 Assistant" })
+                                        &format!("{}:", if self.digest_items[i].source == "user" { "You" } else { "Assistant" })
                                     );
                                     ui.label(&self.digest_items[i].timestamp);
                                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

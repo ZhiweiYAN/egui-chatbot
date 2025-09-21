@@ -768,7 +768,7 @@ impl eframe::App for TemplateApp {
         egui::TopBottomPanel::bottom("chat_input_panel")
             .min_height(60.0)
             .show(ctx, |ui| {
-                ui.add_space(4.0);
+                ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     let input_response = ui.add_sized(
                         [ui.available_width() - 70.0, 25.0],

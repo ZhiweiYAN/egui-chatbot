@@ -4,13 +4,13 @@ use egui_commonmark::CommonMarkViewer;
 impl TemplateApp {
     pub fn render_long_mem_panel(&mut self, ctx: &egui::Context) {
         egui::SidePanel::right("long_term_memory")
-            .default_width(350.0)
-            .min_width(250.0)
+            .default_width(400.0)
+            .min_width(300.0)
             .max_width(500.0)
             .resizable(true)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.heading("M Long Term Memory");
+                    ui.heading("🗄 Longterm Memory");
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let selected_count = self.long_term_memory_items.iter().filter(|item| item.selected).count();
                         let summary_enabled = selected_count > 0 && !self.is_waiting_response;
