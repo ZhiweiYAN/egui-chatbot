@@ -86,6 +86,16 @@ pub struct TemplateApp {
     // Database connection
     #[serde(skip)]
     pub database: Option<Database>,
+
+    // Settings window
+    #[serde(skip)]
+    pub show_settings: bool,
+    #[serde(skip)]
+    pub temp_api_base_url: String,
+    #[serde(skip)]
+    pub temp_api_key: String,
+    #[serde(skip)]
+    pub temp_model: String,
 }
 
 impl Default for TemplateApp {
@@ -101,10 +111,13 @@ impl Default for TemplateApp {
             // Information display
             info_text: "DeepSeek Chat API Integration\nModel: deepseek-chat\nStreaming: Enabled\n中文支持: 已启用 (Chinese Support: Enabled)".to_owned(),
 
-            // API configuration
-            api_base_url: "https://api.deepseek.com".to_owned(),
-            api_key: "sk-35177c12d8bc4125a78c3255072943fe".to_owned(), // Replace with actual API key
-            model: "deepseek-chat".to_owned(),
+            // API configuration from environment variables
+            api_base_url: std::env::var("LLM_BASE_URL")
+                .unwrap_or_else(|_| "https://api.deepseek.com".to_string()),
+            api_key: std::env::var("LLM_API_KEY")
+                .unwrap_or_else(|_| "".to_string()),
+            model: std::env::var("LLM_MODEL")
+                .unwrap_or_else(|_| "deepseek-chat".to_string()),
 
             // Streaming state
             streaming_receiver: None,
@@ -129,6 +142,15 @@ impl Default for TemplateApp {
 
             // Database connection
             database: None,
+
+            // Settings window
+            show_settings: false,
+            temp_api_base_url: std::env::var("LLM_BASE_URL")
+                .unwrap_or_else(|_| "https://api.deepseek.com".to_string()),
+            temp_api_key: std::env::var("LLM_API_KEY")
+                .unwrap_or_else(|_| "".to_string()),
+            temp_model: std::env::var("LLM_MODEL")
+                .unwrap_or_else(|_| "deepseek-chat".to_string()),
         }
     }
 }
@@ -753,13 +775,19 @@ impl eframe::App for TemplateApp {
                             self.load_data_from_database();
                         }
                         ui.separator();
+                        if ui.button("Settings").clicked() {
+                            self.show_settings = true;
+                        }
+                        ui.separator();
                         if ui.button("Quit").clicked() {
                             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                         }
                     });
                     ui.add_space(16.0);
                 }
-                egui::widgets::global_theme_preference_buttons(ui);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    egui::widgets::global_theme_preference_buttons(ui);
+                });
             });
         });
         // BOTTOM PANEL: Chat Input (spans entire window width)
@@ -843,6 +871,51 @@ impl eframe::App for TemplateApp {
                     }
                 });
             });
+
+        // Show settings window if requested
+        if self.show_settings {
+            egui::Window::new("Settings")
+                .collapsible(false)
+                .resizable(true)
+                .default_width(400.0)
+                .show(ctx, |ui| {
+                    ui.heading("LLM Configuration");
+                    ui.separator();
+
+                    ui.horizontal(|ui| {
+                        ui.label("Base URL:");
+                        ui.text_edit_singleline(&mut self.temp_api_base_url);
+                    });
+
+                    ui.horizontal(|ui| {
+                        ui.label("API Key:");
+                        ui.text_edit_singleline(&mut self.temp_api_key);
+                    });
+
+                    ui.horizontal(|ui| {
+                        ui.label("Model:");
+                        ui.text_edit_singleline(&mut self.temp_model);
+                    });
+
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        if ui.button("Apply").clicked() {
+                            // Apply settings
+                            self.api_base_url = self.temp_api_base_url.clone();
+                            self.api_key = self.temp_api_key.clone();
+                            self.model = self.temp_model.clone();
+                            self.show_settings = false;
+                        }
+                        if ui.button("Cancel").clicked() {
+                            // Reset temporary values to current values
+                            self.temp_api_base_url = self.api_base_url.clone();
+                            self.temp_api_key = self.api_key.clone();
+                            self.temp_model = self.model.clone();
+                            self.show_settings = false;
+                        }
+                    });
+                });
+        }
 
         // Render the three panels using the separate modules
         let (digest_actions, memory_actions_from_chat) = self.render_chat_panel(ctx);
