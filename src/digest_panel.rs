@@ -104,13 +104,19 @@ impl TemplateApp {
                 self.digest_items.remove(index);
             }
 
+            ui.add_space(-45.0);
+            ui.label("Tip: Select items and click '📄 Summary' to generate a summary using the LLM.");
             ui.separator();
 
             ui.horizontal(|ui| {
-                if ui.button("Clear All").clicked() && !self.digest_items.is_empty() {
+                // Always show buttons, but enable/disable based on content
+                let clear_enabled = !self.digest_items.is_empty();
+                let export_enabled = !self.digest_items.is_empty();
+
+                if ui.add_enabled(clear_enabled, egui::Button::new("Clear All")).clicked() {
                     self.digest_items.clear();
                 }
-                if ui.button("Export All").clicked() && !self.digest_items.is_empty() {
+                if ui.add_enabled(export_enabled, egui::Button::new("Export All to Clipboard.")).clicked() {
                     let export_text = self.export_digest_items();
                     ui.ctx().copy_text(export_text);
                 }

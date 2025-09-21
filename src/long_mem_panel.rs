@@ -103,13 +103,18 @@ impl TemplateApp {
                     self.long_term_memory_items.remove(index);
                 }
 
+                ui.add_space(-30.0);
                 ui.separator();
 
                 ui.horizontal(|ui| {
-                    if ui.button("Clear All").clicked() && !self.long_term_memory_items.is_empty() {
+                    // Always show buttons, but enable/disable based on content
+                    let clear_enabled = !self.long_term_memory_items.is_empty();
+                    let export_enabled = !self.long_term_memory_items.is_empty();
+
+                    if ui.add_enabled(clear_enabled, egui::Button::new("Clear All")).clicked() {
                         self.long_term_memory_items.clear();
                     }
-                    if ui.button("Export All").clicked() && !self.long_term_memory_items.is_empty() {
+                    if ui.add_enabled(export_enabled, egui::Button::new("Export All")).clicked() {
                         let export_text = self.export_memory_items();
                         ui.ctx().copy_text(export_text);
                     }
