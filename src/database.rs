@@ -75,6 +75,34 @@ impl Database {
             [],
         )?;
 
+        // Create assistant_roles table
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS assistant_roles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                role_name TEXT UNIQUE NOT NULL,
+                display_name TEXT NOT NULL,
+                description TEXT,
+                is_active BOOLEAN DEFAULT 1,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )",
+            [],
+        )?;
+
+        // Create system_prompts table
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS system_prompts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                role_id INTEGER NOT NULL,
+                panel_type TEXT NOT NULL,
+                prompt_text TEXT NOT NULL,
+                is_active BOOLEAN DEFAULT 1,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (role_id) REFERENCES assistant_roles(id),
+                UNIQUE(role_id, panel_type)
+            )",
+            [],
+        )?;
+
         // Create indexes for better performance
         self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_content_original_id ON content_items(original_id)",
@@ -90,6 +118,19 @@ impl Database {
             "CREATE INDEX IF NOT EXISTS idx_panel_associations_panel_type ON panel_associations(panel_type)",
             [],
         )?;
+
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_system_prompts_role_id ON system_prompts(role_id)",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_system_prompts_panel_type ON system_prompts(panel_type)",
+            [],
+        )?;
+
+        // Insert initial roles and prompts if they don't exist
+        self.insert_initial_roles_and_prompts()?;
 
         Ok(())
     }
@@ -240,5 +281,143 @@ impl Database {
         )?;
 
         Ok((total_content, chat_count, digest_count, longterm_count))
+    }
+
+    fn insert_initial_roles_and_prompts(&self) -> SqliteResult<()> {
+        // Check if roles already exist
+        let role_count: usize = self.conn.query_row(
+            "SELECT COUNT(*) FROM assistant_roles",
+            [],
+            |row| row.get(0),
+        )?;
+
+        if role_count > 0 {
+            return Ok(()); // Already initialized
+        }
+
+        // Insert Contract Template Selection role
+        self.conn.execute(
+            "INSERT INTO assistant_roles (role_name, display_name, description) VALUES (?, ?, ?)",
+            params![
+                "contract_template_selection",
+                "Contract Template Selection",
+                "Specialized in legal document analysis and contract template recommendations"
+            ],
+        )?;
+
+        let contract_role_id = self.conn.last_insert_rowid();
+
+        // Insert Procurement Template Selection role
+        self.conn.execute(
+            "INSERT INTO assistant_roles (role_name, display_name, description) VALUES (?, ?, ?)",
+            params![
+                "procurement_template_selection",
+                "Procurement Template Selection",
+                "Specialized in procurement processes and vendor management guidance"
+            ],
+        )?;
+
+        let procurement_role_id = self.conn.last_insert_rowid();
+
+        // Insert system prompts for Contract Template Selection role
+        self.conn.execute(
+            "INSERT INTO system_prompts (role_id, panel_type, prompt_text) VALUES (?, ?, ?)",
+            params![
+                contract_role_id,
+                "chat",
+                "You are a legal expert specializing in contract template selection and analysis. Help users identify the most appropriate contract templates based on their specific needs, analyze contract clauses, and provide guidance on legal document requirements. Focus on contract types, legal compliance, and template recommendations."
+            ],
+        )?;
+
+        self.conn.execute(
+            "INSERT INTO system_prompts (role_id, panel_type, prompt_text) VALUES (?, ?, ?)",
+            params![
+                contract_role_id,
+                "digest",
+                "When summarizing contract-related content, focus on extracting key legal clauses, contract terms, obligations, rights, and template recommendations. Highlight important legal considerations, compliance requirements, and critical contract elements that need attention."
+            ],
+        )?;
+
+        self.conn.execute(
+            "INSERT INTO system_prompts (role_id, panel_type, prompt_text) VALUES (?, ?, ?)",
+            params![
+                contract_role_id,
+                "memory",
+                "When processing long-term memory for contracts, organize information by contract types, legal precedents, standard clauses, and template patterns. Maintain knowledge of legal requirements, compliance standards, and best practices for contract template selection and management."
+            ],
+        )?;
+
+        // Insert system prompts for Procurement Template Selection role
+        self.conn.execute(
+            "INSERT INTO system_prompts (role_id, panel_type, prompt_text) VALUES (?, ?, ?)",
+            params![
+                procurement_role_id,
+                "chat",
+                "You are a procurement expert specializing in procurement template selection and vendor management. Help users choose appropriate procurement templates (RFP, RFQ, vendor agreements), guide them through procurement processes, and provide best practices for vendor selection and management."
+            ],
+        )?;
+
+        self.conn.execute(
+            "INSERT INTO system_prompts (role_id, panel_type, prompt_text) VALUES (?, ?, ?)",
+            params![
+                procurement_role_id,
+                "digest",
+                "When summarizing procurement-related content, focus on extracting vendor requirements, procurement specifications, evaluation criteria, and template recommendations. Highlight key procurement processes, vendor qualifications, and critical decision points."
+            ],
+        )?;
+
+        self.conn.execute(
+            "INSERT INTO system_prompts (role_id, panel_type, prompt_text) VALUES (?, ?, ?)",
+            params![
+                procurement_role_id,
+                "memory",
+                "When processing long-term memory for procurement, organize information by procurement types, vendor categories, evaluation methodologies, and template patterns. Maintain knowledge of procurement best practices, vendor management strategies, and template selection criteria."
+            ],
+        )?;
+
+        Ok(())
+    }
+
+    pub fn get_assistant_roles(&self) -> SqliteResult<Vec<(i64, String, String, String)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, role_name, display_name, description FROM assistant_roles WHERE is_active = 1 ORDER BY display_name"
+        )?;
+
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        })?;
+
+        let mut roles = Vec::new();
+        for row in rows {
+            roles.push(row?);
+        }
+
+        Ok(roles)
+    }
+
+    pub fn get_system_prompts_for_role(&self, role_id: i64) -> SqliteResult<std::collections::HashMap<String, String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT panel_type, prompt_text FROM system_prompts WHERE role_id = ? AND is_active = 1"
+        )?;
+
+        let rows = stmt.query_map([role_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+            ))
+        })?;
+
+        let mut prompts = std::collections::HashMap::new();
+        for row in rows {
+            let (panel_type, prompt_text) = row?;
+            prompts.insert(panel_type, prompt_text);
+        }
+
+        Ok(prompts)
     }
 }

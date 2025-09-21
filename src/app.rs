@@ -96,6 +96,16 @@ pub struct TemplateApp {
     pub temp_api_key: String,
     #[serde(skip)]
     pub temp_model: String,
+
+    // Assistant role management
+    #[serde(skip)]
+    pub current_assistant_role_id: Option<i64>,
+    #[serde(skip)]
+    pub temp_assistant_role_id: Option<i64>,
+    #[serde(skip)]
+    pub available_roles: Vec<(i64, String, String, String)>, // (id, role_name, display_name, description)
+    #[serde(skip)]
+    pub current_system_prompts: std::collections::HashMap<String, String>, // panel_type -> prompt_text
 }
 
 impl Default for TemplateApp {
@@ -151,6 +161,12 @@ impl Default for TemplateApp {
                 .unwrap_or_else(|_| "".to_string()),
             temp_model: std::env::var("LLM_MODEL")
                 .unwrap_or_else(|_| "deepseek-chat".to_string()),
+
+            // Assistant role management
+            current_assistant_role_id: None,
+            temp_assistant_role_id: None,
+            available_roles: Vec::new(),
+            current_system_prompts: std::collections::HashMap::new(),
         }
     }
 }
@@ -183,6 +199,10 @@ impl TemplateApp {
 
         // Set the database connection
         app.database = database;
+
+        // Load assistant roles and set default role
+        app.load_assistant_roles();
+
         app
     }
 
@@ -260,6 +280,39 @@ impl TemplateApp {
         }
 
         ctx.set_fonts(fonts);
+    }
+
+    fn load_assistant_roles(&mut self) {
+        if let Some(ref db) = self.database {
+            // Load available roles
+            match db.get_assistant_roles() {
+                Ok(roles) => {
+                    self.available_roles = roles;
+                    // Set default role to the first one if no role is selected
+                    if self.current_assistant_role_id.is_none() && !self.available_roles.is_empty() {
+                        self.current_assistant_role_id = Some(self.available_roles[0].0);
+                        self.temp_assistant_role_id = Some(self.available_roles[0].0);
+                        self.load_system_prompts_for_current_role();
+                    }
+                }
+                Err(e) => {
+                    log::error!("Failed to load assistant roles: {}", e);
+                }
+            }
+        }
+    }
+
+    fn load_system_prompts_for_current_role(&mut self) {
+        if let (Some(role_id), Some(db)) = (self.current_assistant_role_id, &self.database) {
+            match db.get_system_prompts_for_role(role_id) {
+                Ok(prompts) => {
+                    self.current_system_prompts = prompts;
+                }
+                Err(e) => {
+                    log::error!("Failed to load system prompts for role {}: {}", role_id, e);
+                }
+            }
+        }
     }
 
     pub fn add_to_digest(&mut self, content: String, source: String) {
@@ -525,8 +578,8 @@ impl TemplateApp {
         self.is_waiting_response = true;
         self.current_response.clear();
 
-        // Send to API using the same chat API logic
-        self.send_to_api(ctx);
+        // Send to API using digest panel system prompt
+        self.send_to_api_with_panel("digest", ctx);
     }
 
     pub fn start_memory_summary_generation(&mut self, ctx: &egui::Context) {
@@ -577,15 +630,20 @@ impl TemplateApp {
         self.is_waiting_response = true;
         self.current_response.clear();
 
-        // Send to API using the same chat API logic
-        self.send_to_api(ctx);
+        // Send to API using memory panel system prompt
+        self.send_to_api_with_panel("memory", ctx);
     }
 
     fn send_to_api(&mut self, ctx: &egui::Context) {
+        self.send_to_api_with_panel("chat", ctx);
+    }
+
+    fn send_to_api_with_panel(&mut self, panel_type: &str, ctx: &egui::Context) {
         let api_base_url = self.api_base_url.clone();
         let api_key = self.api_key.clone();
         let model = self.model.clone();
         let messages = self.chat_messages.clone();
+        let system_prompt = self.current_system_prompts.get(panel_type).cloned();
         let ctx_clone = ctx.clone();
 
         let (tx, rx) = mpsc::channel();
@@ -596,6 +654,16 @@ impl TemplateApp {
             let api_url = format!("{}/chat/completions", api_base_url);
 
             let mut api_messages = Vec::new();
+
+            // Add system prompt if available
+            if let Some(system_prompt) = system_prompt {
+                api_messages.push(serde_json::json!({
+                    "role": "system",
+                    "content": system_prompt
+                }));
+            }
+
+            // Add user and assistant messages
             for msg in &messages {
                 if !msg.content.is_empty() {
                     api_messages.push(serde_json::json!({
@@ -870,6 +938,20 @@ impl eframe::App for TemplateApp {
                         }
                     }
                 });
+
+                // Add role indicator
+                ui.separator();
+                if let Some(role_id) = self.current_assistant_role_id {
+                    if let Some((_, _, display_name, _)) = self.available_roles
+                        .iter()
+                        .find(|(id, _, _, _)| *id == role_id) {
+                        ui.colored_label(egui::Color32::GRAY, format!("👤 Assistant Role: {}", display_name));
+                    } else {
+                        ui.colored_label(egui::Color32::GRAY, "👤 Assistant Role: Unknown");
+                    }
+                } else {
+                    ui.colored_label(egui::Color32::GRAY, "👤 No Assistant Role Selected");
+                }
             });
 
         // Show settings window if requested
@@ -898,12 +980,62 @@ impl eframe::App for TemplateApp {
                     });
 
                     ui.separator();
+                    ui.heading("Assistant Role");
+                    ui.separator();
+
+                    // Role selection dropdown
+                    ui.horizontal(|ui| {
+                        ui.label("Role:");
+
+                        let current_role_name = if let Some(role_id) = self.temp_assistant_role_id {
+                            self.available_roles
+                                .iter()
+                                .find(|(id, _, _, _)| *id == role_id)
+                                .map(|(_, _, display_name, _)| display_name.clone())
+                                .unwrap_or_else(|| "Unknown Role".to_string())
+                        } else {
+                            "No Role Selected".to_string()
+                        };
+
+                        egui::ComboBox::from_label("")
+                            .selected_text(current_role_name)
+                            .show_ui(ui, |ui| {
+                                for (role_id, _role_name, display_name, description) in &self.available_roles {
+                                    let is_selected = self.temp_assistant_role_id == Some(*role_id);
+                                    let response = ui.selectable_label(is_selected, display_name);
+                                    if response.clicked() {
+                                        self.temp_assistant_role_id = Some(*role_id);
+                                    }
+                                    if response.hovered() {
+                                        response.on_hover_text(description);
+                                    }
+                                }
+                            });
+                    });
+
+                    // Show current role description if available
+                    if let Some(role_id) = self.temp_assistant_role_id {
+                        if let Some((_, _, _, description)) = self.available_roles
+                            .iter()
+                            .find(|(id, _, _, _)| *id == role_id) {
+                            ui.colored_label(egui::Color32::GRAY, description);
+                        }
+                    }
+
+                    ui.separator();
                     ui.horizontal(|ui| {
                         if ui.button("Apply").clicked() {
                             // Apply settings
                             self.api_base_url = self.temp_api_base_url.clone();
                             self.api_key = self.temp_api_key.clone();
                             self.model = self.temp_model.clone();
+
+                            // Apply role change
+                            if self.current_assistant_role_id != self.temp_assistant_role_id {
+                                self.current_assistant_role_id = self.temp_assistant_role_id;
+                                self.load_system_prompts_for_current_role();
+                            }
+
                             self.show_settings = false;
                         }
                         if ui.button("Cancel").clicked() {
@@ -911,6 +1043,7 @@ impl eframe::App for TemplateApp {
                             self.temp_api_base_url = self.api_base_url.clone();
                             self.temp_api_key = self.api_key.clone();
                             self.temp_model = self.model.clone();
+                            self.temp_assistant_role_id = self.current_assistant_role_id;
                             self.show_settings = false;
                         }
                     });

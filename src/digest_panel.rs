@@ -48,7 +48,7 @@ impl TemplateApp {
                 .stick_to_bottom(true)
                 .show(ui, |ui| {
                     if self.digest_items.is_empty() {
-                        ui.colored_label(egui::Color32::GRAY, "No digest items yet.\nClick '📋 Digest' on chat messages to collect important content.");
+                        ui.colored_label(egui::Color32::GRAY, "No digest items yet.\nClick '📌 Digest' on chat messages to collect important content.");
                     } else {
                         let search_term = self.digest_search.to_lowercase();
                         let filtered_indices: Vec<usize> = self.digest_items
@@ -80,7 +80,7 @@ impl TemplateApp {
                                         if ui.small_button("🗑").on_hover_text("Delete item").clicked() {
                                             item_to_delete = Some(i);
                                         }
-                                        if ui.small_button("M").on_hover_text("Copy to Long Term Memory").clicked() {
+                                        if ui.small_button("🗄").on_hover_text("Copy to Long Term Memory").clicked() {
                                             memory_actions.push((self.digest_items[i].content.clone(), self.digest_items[i].source.clone()));
                                         }
                                         if ui.small_button("📋").on_hover_text("Copy to clipboard").clicked() {
