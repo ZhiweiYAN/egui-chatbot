@@ -1,6 +1,7 @@
-use std::sync::mpsc;
-use futures::StreamExt;
+use crate::database::Database;
 use egui_commonmark::CommonMarkCache;
+use futures::StreamExt;
+use std::sync::mpsc;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct ChatMessage {
@@ -81,6 +82,10 @@ pub struct TemplateApp {
     // Markdown cache for digest panel
     #[serde(skip)]
     pub markdown_cache: CommonMarkCache,
+
+    // Database connection
+    #[serde(skip)]
+    pub database: Option<Database>,
 }
 
 impl Default for TemplateApp {
@@ -121,6 +126,9 @@ impl Default for TemplateApp {
 
             // Markdown cache for digest panel
             markdown_cache: CommonMarkCache::default(),
+
+            // Database connection
+            database: None,
         }
     }
 }
@@ -134,13 +142,26 @@ impl TemplateApp {
         // Configure fonts to support Chinese characters
         Self::configure_fonts(&cc.egui_ctx);
 
+        // Initialize database
+        let database = match Database::new() {
+            Ok(db) => Some(db),
+            Err(e) => {
+                log::error!("Failed to initialize database: {}", e);
+                None
+            }
+        };
+
         // Load previous app state (if any).
         // Note that you must enable the `persistence` feature for this to work.
-        if let Some(storage) = cc.storage {
+        let mut app: TemplateApp = if let Some(storage) = cc.storage {
             eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default()
         } else {
             Default::default()
-        }
+        };
+
+        // Set the database connection
+        app.database = database;
+        app
     }
 
     fn configure_fonts(ctx: &egui::Context) {
@@ -235,13 +256,26 @@ impl TemplateApp {
 
         let digest_item = DigestItem {
             id,
-            content,
-            source,
-            timestamp: formatted_time,
+            content: content.clone(),
+            source: source.clone(),
+            timestamp: formatted_time.clone(),
             selected: true, // Default to selected when adding new items
         };
 
         self.digest_items.push(digest_item);
+
+        // Auto-save to database
+        if let Some(ref db) = self.database {
+            if let Err(e) = db.save_content(
+                &content,
+                &source,
+                timestamp as i64,
+                &formatted_time,
+                &["digest"],
+            ) {
+                log::error!("Failed to save digest item to database: {}", e);
+            }
+        }
     }
 
     pub fn add_to_long_term_memory(&mut self, content: String, source: String) {
@@ -260,13 +294,115 @@ impl TemplateApp {
 
         let memory_item = LongTermMemoryItem {
             id,
-            content,
-            source,
-            timestamp: formatted_time,
+            content: content.clone(),
+            source: source.clone(),
+            timestamp: formatted_time.clone(),
             selected: true, // Default to selected when adding new items
         };
 
         self.long_term_memory_items.push(memory_item);
+
+        // Auto-save to database
+        if let Some(ref db) = self.database {
+            if let Err(e) = db.save_content(
+                &content,
+                &source,
+                timestamp as i64,
+                &formatted_time,
+                &["longterm"],
+            ) {
+                log::error!("Failed to save longterm memory item to database: {}", e);
+            }
+        }
+    }
+
+    pub fn save_chat_message_to_db(&self, message: &ChatMessage) {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let formatted_time = chrono::DateTime::from_timestamp(timestamp as i64, 0)
+            .unwrap_or_else(|| chrono::Utc::now())
+            .format("%H:%M")
+            .to_string();
+
+        // Auto-save to database
+        if let Some(ref db) = self.database {
+            if let Err(e) = db.save_content(
+                &message.content,
+                &message.role,
+                timestamp as i64,
+                &formatted_time,
+                &["chat"],
+            ) {
+                log::error!("Failed to save chat message to database: {}", e);
+            }
+        }
+    }
+
+    pub fn load_data_from_database(&mut self) {
+        if let Some(ref db) = self.database {
+            // Load chat messages
+            match db.load_chat_messages() {
+                Ok(messages) => {
+                    self.chat_messages = messages;
+                    log::info!(
+                        "Loaded {} chat messages from database",
+                        self.chat_messages.len()
+                    );
+                }
+                Err(e) => {
+                    log::error!("Failed to load chat messages from database: {}", e);
+                }
+            }
+
+            // Load digest items
+            match db.load_digest_items() {
+                Ok(items) => {
+                    self.digest_items = items;
+                    log::info!(
+                        "Loaded {} digest items from database",
+                        self.digest_items.len()
+                    );
+                }
+                Err(e) => {
+                    log::error!("Failed to load digest items from database: {}", e);
+                }
+            }
+
+            // Load long-term memory items
+            match db.load_longterm_memory_items() {
+                Ok(items) => {
+                    self.long_term_memory_items = items;
+                    log::info!(
+                        "Loaded {} long-term memory items from database",
+                        self.long_term_memory_items.len()
+                    );
+                }
+                Err(e) => {
+                    log::error!("Failed to load long-term memory items from database: {}", e);
+                }
+            }
+
+            // Get database stats for info display
+            match db.get_database_stats() {
+                Ok((total_content, chat_count, digest_count, longterm_count)) => {
+                    self.info_text = format!(
+                        "Database loaded successfully!\nTotal unique content items: {}\nChat messages: {}\nDigest items: {}\nLong-term memory items: {}",
+                        total_content, chat_count, digest_count, longterm_count
+                    );
+                }
+                Err(e) => {
+                    log::error!("Failed to get database stats: {}", e);
+                }
+            }
+        } else {
+            self.info_text = "Database not available. Cannot load data.".to_string();
+            log::error!("Database not initialized. Cannot load data.");
+        }
     }
 
     pub fn export_digest_items(&self) -> String {
@@ -274,9 +410,14 @@ impl TemplateApp {
         export_text.push_str("# Digested Content Export\n\n");
 
         for (i, item) in self.digest_items.iter().enumerate() {
-            export_text.push_str(&format!("## Item {} - {} ({})\n\n",
+            export_text.push_str(&format!(
+                "## Item {} - {} ({})\n\n",
                 i + 1,
-                if item.source == "user" { "You" } else { "Assistant" },
+                if item.source == "user" {
+                    "You"
+                } else {
+                    "Assistant"
+                },
                 item.timestamp
             ));
             export_text.push_str(&item.content);
@@ -293,9 +434,14 @@ impl TemplateApp {
         export_text.push_str("# Long Term Memory Export\n\n");
 
         for (i, item) in self.long_term_memory_items.iter().enumerate() {
-            export_text.push_str(&format!("## Item {} - {} ({})\n\n",
+            export_text.push_str(&format!(
+                "## Item {} - {} ({})\n\n",
                 i + 1,
-                if item.source == "user" { "You" } else { "Assistant" },
+                if item.source == "user" {
+                    "You"
+                } else {
+                    "Assistant"
+                },
                 item.timestamp
             ));
             export_text.push_str(&item.content);
@@ -303,12 +449,19 @@ impl TemplateApp {
             export_text.push_str("---\n\n");
         }
 
-        export_text.push_str(&format!("*Exported {} items*", self.long_term_memory_items.len()));
+        export_text.push_str(&format!(
+            "*Exported {} items*",
+            self.long_term_memory_items.len()
+        ));
         export_text
     }
 
     pub fn start_digest_summary_generation(&mut self, ctx: &egui::Context) {
-        let selected_items: Vec<&DigestItem> = self.digest_items.iter().filter(|item| item.selected).collect();
+        let selected_items: Vec<&DigestItem> = self
+            .digest_items
+            .iter()
+            .filter(|item| item.selected)
+            .collect();
 
         if selected_items.is_empty() || self.is_waiting_response {
             return;
@@ -316,12 +469,18 @@ impl TemplateApp {
 
         // Prepare digest content for summarization
         let mut content_to_summarize = String::new();
-        content_to_summarize.push_str("Please provide a comprehensive summary of the following digest items:\n\n");
+        content_to_summarize
+            .push_str("Please provide a comprehensive summary of the following digest items:\n\n");
 
         for (i, item) in selected_items.iter().enumerate() {
-            content_to_summarize.push_str(&format!("{}. {} ({}):\n{}\n\n",
+            content_to_summarize.push_str(&format!(
+                "{}. {} ({}):\n{}\n\n",
                 i + 1,
-                if item.source == "user" { "User" } else { "Assistant" },
+                if item.source == "user" {
+                    "User"
+                } else {
+                    "Assistant"
+                },
                 item.timestamp,
                 item.content
             ));
@@ -349,7 +508,11 @@ impl TemplateApp {
     }
 
     pub fn start_memory_summary_generation(&mut self, ctx: &egui::Context) {
-        let selected_items: Vec<&LongTermMemoryItem> = self.long_term_memory_items.iter().filter(|item| item.selected).collect();
+        let selected_items: Vec<&LongTermMemoryItem> = self
+            .long_term_memory_items
+            .iter()
+            .filter(|item| item.selected)
+            .collect();
 
         if selected_items.is_empty() || self.is_waiting_response {
             return;
@@ -357,12 +520,19 @@ impl TemplateApp {
 
         // Prepare memory content for summarization
         let mut content_to_summarize = String::new();
-        content_to_summarize.push_str("Please provide a comprehensive summary of the following long term memory items:\n\n");
+        content_to_summarize.push_str(
+            "Please provide a comprehensive summary of the following long term memory items:\n\n",
+        );
 
         for (i, item) in selected_items.iter().enumerate() {
-            content_to_summarize.push_str(&format!("{}. {} ({}):\n{}\n\n",
+            content_to_summarize.push_str(&format!(
+                "{}. {} ({}):\n{}\n\n",
                 i + 1,
-                if item.source == "user" { "User" } else { "Assistant" },
+                if item.source == "user" {
+                    "User"
+                } else {
+                    "Assistant"
+                },
                 item.timestamp,
                 item.content
             ));
@@ -439,8 +609,10 @@ impl TemplateApp {
                                     let chunk_str = String::from_utf8_lossy(&chunk);
                                     buffer.push_str(&chunk_str);
 
-                                    let lines: Vec<String> = buffer.split('\n').map(|s| s.to_string()).collect();
-                                    let processed_lines: Vec<String> = lines[..lines.len().saturating_sub(1)].to_vec();
+                                    let lines: Vec<String> =
+                                        buffer.split('\n').map(|s| s.to_string()).collect();
+                                    let processed_lines: Vec<String> =
+                                        lines[..lines.len().saturating_sub(1)].to_vec();
                                     buffer = lines.last().cloned().unwrap_or_default();
 
                                     for line in processed_lines {
@@ -452,12 +624,20 @@ impl TemplateApp {
                                                 return;
                                             }
 
-                                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
+                                            if let Ok(json) =
+                                                serde_json::from_str::<serde_json::Value>(data)
+                                            {
                                                 if let Some(choices) = json["choices"].as_array() {
                                                     if let Some(choice) = choices.first() {
-                                                        if let Some(delta) = choice["delta"].as_object() {
-                                                            if let Some(content) = delta["content"].as_str() {
-                                                                if let Err(_e) = tx.send(content.to_string()) {
+                                                        if let Some(delta) =
+                                                            choice["delta"].as_object()
+                                                        {
+                                                            if let Some(content) =
+                                                                delta["content"].as_str()
+                                                            {
+                                                                if let Err(_e) =
+                                                                    tx.send(content.to_string())
+                                                                {
                                                                 } else {
                                                                 }
                                                                 ctx_clone.request_repaint();
@@ -517,6 +697,9 @@ impl eframe::App for TemplateApp {
                                 if let Some(last_msg) = self.chat_messages.last_mut() {
                                     if last_msg.role == "assistant" {
                                         last_msg.content = self.current_response.clone();
+                                        // Save assistant response to database
+                                        let msg_to_save = last_msg.clone();
+                                        self.save_chat_message_to_db(&msg_to_save);
                                     }
                                 }
                             }
@@ -529,7 +712,9 @@ impl eframe::App for TemplateApp {
                         } else if content.is_empty() {
                             // Empty content can be part of streaming, don't close
                             continue;
-                        } else if content.starts_with("Error:") || content.starts_with("Connection error:") {
+                        } else if content.starts_with("Error:")
+                            || content.starts_with("Connection error:")
+                        {
                             // Handle errors
                             self.last_error = Some(content.clone());
                             self.current_response = format!("❌ {}", content);
@@ -564,6 +749,10 @@ impl eframe::App for TemplateApp {
                 let is_web = cfg!(target_arch = "wasm32");
                 if !is_web {
                     ui.menu_button("File", |ui| {
+                        if ui.button("Load from DB").clicked() {
+                            self.load_data_from_database();
+                        }
+                        ui.separator();
                         if ui.button("Quit").clicked() {
                             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                         }
@@ -585,17 +774,19 @@ impl eframe::App for TemplateApp {
                         [ui.available_width() - 70.0, 25.0],
                         egui::TextEdit::singleline(&mut self.chat_input)
                             .hint_text("Type your message... (输入你的消息...)")
-                            .font(egui::TextStyle::Body)
+                            .font(egui::TextStyle::Body),
                     );
 
                     // Handle Enter key press and focus requests
-                    if input_response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    if input_response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                    {
                         if !self.chat_input.trim().is_empty() && !self.is_waiting_response {
                             // Send message logic here
                             let user_message = ChatMessage {
                                 role: "user".to_string(),
                                 content: self.chat_input.clone(),
                             };
+                            self.save_chat_message_to_db(&user_message);
                             self.chat_messages.push(user_message);
 
                             // Add placeholder for assistant response
@@ -620,14 +811,19 @@ impl eframe::App for TemplateApp {
                         self.should_focus_input = false;
                     }
 
-                    let send_enabled = !self.chat_input.trim().is_empty() && !self.is_waiting_response;
-                    if ui.add_enabled(send_enabled, egui::Button::new("Send")).clicked() {
+                    let send_enabled =
+                        !self.chat_input.trim().is_empty() && !self.is_waiting_response;
+                    if ui
+                        .add_enabled(send_enabled, egui::Button::new("Send"))
+                        .clicked()
+                    {
                         if !self.chat_input.trim().is_empty() && !self.is_waiting_response {
                             // Same send logic as Enter key
                             let user_message = ChatMessage {
                                 role: "user".to_string(),
                                 content: self.chat_input.clone(),
                             };
+                            self.save_chat_message_to_db(&user_message);
                             self.chat_messages.push(user_message);
 
                             // Add placeholder for assistant response
@@ -663,8 +859,6 @@ impl eframe::App for TemplateApp {
         for (content, source) in memory_actions_from_digest {
             self.add_to_long_term_memory(content, source);
         }
-
-
     }
 }
 
