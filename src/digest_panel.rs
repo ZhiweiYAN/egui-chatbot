@@ -69,6 +69,7 @@ impl TemplateApp {
                             ui.colored_label(egui::Color32::GRAY, "No items match your search.");
                         } else {
                             for i in filtered_indices {
+                                // Header with checkbox, label, and timestamp
                                 ui.horizontal(|ui| {
                                     ui.checkbox(&mut self.digest_items[i].selected, "");
                                     ui.colored_label(
@@ -76,6 +77,18 @@ impl TemplateApp {
                                         &format!("{}:", if self.digest_items[i].source == "user" { "You" } else { "Assistant" })
                                     );
                                     ui.label(&self.digest_items[i].timestamp);
+                                });
+
+                                // Content
+                                if self.digest_items[i].source == "user" {
+                                    ui.label(&self.digest_items[i].content);
+                                } else {
+                                    // Render assistant messages as markdown in digest panel
+                                    CommonMarkViewer::new().show(ui, &mut self.markdown_cache, &self.digest_items[i].content);
+                                }
+
+                                // Action buttons at the end
+                                ui.horizontal(|ui| {
                                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                         if ui.small_button("🗑").on_hover_text("Delete item").clicked() {
                                             item_to_delete = Some(i);
@@ -88,12 +101,7 @@ impl TemplateApp {
                                         }
                                     });
                                 });
-                                if self.digest_items[i].source == "user" {
-                                    ui.label(&self.digest_items[i].content);
-                                } else {
-                                    // Render assistant messages as markdown in digest panel
-                                    CommonMarkViewer::new().show(ui, &mut self.markdown_cache, &self.digest_items[i].content);
-                                }
+
                                 ui.add_space(5.0);
                             }
                         }

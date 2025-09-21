@@ -1051,19 +1051,30 @@ impl eframe::App for TemplateApp {
                     }
                 });
 
-                // Add role indicator
+                // Add role indicator with reload button
                 ui.separator();
-                if let Some(role_id) = self.current_assistant_role_id {
-                    if let Some((_, _, display_name, _)) = self.available_roles
-                        .iter()
-                        .find(|(id, _, _, _)| *id == role_id) {
-                        ui.colored_label(egui::Color32::GRAY, format!("👤 Assistant Role: {}", display_name));
+                ui.horizontal(|ui| {
+                    if let Some(role_id) = self.current_assistant_role_id {
+                        if let Some((_, _, display_name, _)) = self.available_roles
+                            .iter()
+                            .find(|(id, _, _, _)| *id == role_id) {
+                            ui.colored_label(egui::Color32::GRAY, format!("👤 Assistant Role: {}", display_name));
+                        } else {
+                            ui.colored_label(egui::Color32::GRAY, "👤 Assistant Role: Unknown");
+                        }
+
+                        // Add reload button (enabled when role is selected)
+                        if ui.small_button("🔄 Reload").on_hover_text("Reload system prompts from database").clicked() {
+                            self.load_system_prompts_for_current_role();
+                        }
                     } else {
-                        ui.colored_label(egui::Color32::GRAY, "👤 Assistant Role: Unknown");
+                        ui.colored_label(egui::Color32::GRAY, "👤 No Assistant Role Selected");
+
+                        // Add disabled reload button when no role selected
+                        ui.add_enabled(false, egui::Button::new("🔄 Reload").small())
+                            .on_hover_text("Select a role first to enable reload");
                     }
-                } else {
-                    ui.colored_label(egui::Color32::GRAY, "👤 No Assistant Role Selected");
-                }
+                });
             });
 
         // Show settings window if requested

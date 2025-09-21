@@ -62,8 +62,11 @@ impl TemplateApp {
                                 let message = &self.chat_messages[i];
                                 if message.role == "user" {
                                     ui.vertical(|ui| {
+                                        ui.colored_label(egui::Color32::LIGHT_BLUE, "You:");
+                                        ui.label(&message.content);
+
+                                        // Add buttons at the end of message
                                         ui.horizontal(|ui| {
-                                            ui.colored_label(egui::Color32::LIGHT_BLUE, "You:");
                                             ui.with_layout(
                                                 egui::Layout::right_to_left(egui::Align::Center),
                                                 |ui| {
@@ -82,7 +85,6 @@ impl TemplateApp {
                                                 },
                                             );
                                         });
-                                        ui.label(&message.content);
                                     });
                                 } else if message.role == "assistant" {
                                     if i == self.chat_messages.len() - 1 && self.is_waiting_response
@@ -90,6 +92,13 @@ impl TemplateApp {
                                         // Show streaming response for the last assistant message
                                         if !self.current_response.is_empty() {
                                             ui.vertical(|ui| {
+                                                ui.colored_label(
+                                                    egui::Color32::DARK_GREEN,
+                                                    &self.current_response,
+                                                );
+                                                // CommonMarkViewer::new().show(ui, &mut self.markdown_cache, &self.current_response);
+
+                                                // Add buttons at the end of streaming message
                                                 ui.horizontal(|ui| {
                                                     ui.with_layout(
                                                         egui::Layout::right_to_left(
@@ -112,16 +121,15 @@ impl TemplateApp {
                                                         },
                                                     );
                                                 });
-                                                ui.colored_label(
-                                                    egui::Color32::DARK_GREEN,
-                                                    &self.current_response,
-                                                );
                                             });
                                         } else {
                                             ui.colored_label(egui::Color32::BROWN, "🖊 typing...");
                                         }
                                     } else {
                                         ui.vertical(|ui| {
+                                            ui.label(&message.content);
+
+                                            // Add buttons at the end of message
                                             ui.horizontal(|ui| {
                                                 ui.with_layout(
                                                     egui::Layout::right_to_left(
@@ -143,7 +151,6 @@ impl TemplateApp {
                                                     },
                                                 );
                                             });
-                                            ui.label(&message.content);
                                         });
                                     }
                                     // Add spacing after assistant response (end of conversation turn)
