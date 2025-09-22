@@ -69,38 +69,83 @@ impl TemplateApp {
                             ui.colored_label(egui::Color32::GRAY, "No items match your search.");
                         } else {
                             for i in filtered_indices {
-                                // Header with checkbox, label, and timestamp
-                                ui.horizontal(|ui| {
-                                    ui.checkbox(&mut self.digest_items[i].selected, "");
-                                    ui.colored_label(
-                                        if self.digest_items[i].source == "user" { egui::Color32::LIGHT_BLUE } else { egui::Color32::DARK_GREEN },
-                                        &format!("{}:", if self.digest_items[i].source == "user" { "You" } else { "Assistant" })
-                                    );
-                                    ui.label(&self.digest_items[i].timestamp);
-                                });
+                                // Check selection state first
+                                let is_selected = self.digest_items[i].selected;
 
-                                // Content
-                                if self.digest_items[i].source == "user" {
-                                    ui.label(&self.digest_items[i].content);
+                                // Apply background highlighting if selected
+                                if is_selected {
+                                    egui::Frame::default()
+                                        .fill(ui.visuals().selection.bg_fill)
+                                        .inner_margin(egui::Margin::same(4))
+                                        .corner_radius(egui::CornerRadius::same(3))
+                                        .show(ui, |ui| {
+                                            // Header with checkbox, label, and timestamp
+                                            ui.horizontal(|ui| {
+                                                ui.checkbox(&mut self.digest_items[i].selected, "");
+                                                ui.colored_label(
+                                                    if self.digest_items[i].source == "user" { egui::Color32::DARK_RED } else { egui::Color32::DARK_GREEN },
+                                                    &format!("{}:", if self.digest_items[i].source == "user" { "You" } else { "Assistant" })
+                                                );
+                                                ui.label(&self.digest_items[i].timestamp);
+                                            });
+
+                                            // Content
+                                            if self.digest_items[i].source == "user" {
+                                                ui.label(&self.digest_items[i].content);
+                                            } else {
+                                                // Render assistant messages as markdown in digest panel
+                                                CommonMarkViewer::new().show(ui, &mut self.markdown_cache, &self.digest_items[i].content);
+                                            }
+
+                                            // Action buttons at the end
+                                            ui.horizontal(|ui| {
+                                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                                    if ui.small_button("🗑").on_hover_text("Delete item").clicked() {
+                                                        item_to_delete = Some(i);
+                                                    }
+                                                    if ui.small_button("🗄").on_hover_text("Copy to Long Term Memory").clicked() {
+                                                        memory_actions.push((self.digest_items[i].content.clone(), self.digest_items[i].source.clone()));
+                                                    }
+                                                    if ui.small_button("📋").on_hover_text("Copy to clipboard").clicked() {
+                                                        ui.ctx().copy_text(self.digest_items[i].content.clone());
+                                                    }
+                                                });
+                                            });
+                                        });
                                 } else {
-                                    // Render assistant messages as markdown in digest panel
-                                    CommonMarkViewer::new().show(ui, &mut self.markdown_cache, &self.digest_items[i].content);
-                                }
-
-                                // Action buttons at the end
-                                ui.horizontal(|ui| {
-                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                        if ui.small_button("🗑").on_hover_text("Delete item").clicked() {
-                                            item_to_delete = Some(i);
-                                        }
-                                        if ui.small_button("🗄").on_hover_text("Copy to Long Term Memory").clicked() {
-                                            memory_actions.push((self.digest_items[i].content.clone(), self.digest_items[i].source.clone()));
-                                        }
-                                        if ui.small_button("📋").on_hover_text("Copy to clipboard").clicked() {
-                                            ui.ctx().copy_text(self.digest_items[i].content.clone());
-                                        }
+                                    // Header with checkbox, label, and timestamp
+                                    ui.horizontal(|ui| {
+                                        ui.checkbox(&mut self.digest_items[i].selected, "");
+                                        ui.colored_label(
+                                            if self.digest_items[i].source == "user" { egui::Color32::DARK_RED } else { egui::Color32::DARK_GREEN },
+                                            &format!("{}:", if self.digest_items[i].source == "user" { "You" } else { "Assistant" })
+                                        );
+                                        ui.label(&self.digest_items[i].timestamp);
                                     });
-                                });
+
+                                    // Content
+                                    if self.digest_items[i].source == "user" {
+                                        ui.label(&self.digest_items[i].content);
+                                    } else {
+                                        // Render assistant messages as markdown in digest panel
+                                        CommonMarkViewer::new().show(ui, &mut self.markdown_cache, &self.digest_items[i].content);
+                                    }
+
+                                    // Action buttons at the end
+                                    ui.horizontal(|ui| {
+                                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                            if ui.small_button("🗑").on_hover_text("Delete item").clicked() {
+                                                item_to_delete = Some(i);
+                                            }
+                                            if ui.small_button("🗄").on_hover_text("Copy to Long Term Memory").clicked() {
+                                                memory_actions.push((self.digest_items[i].content.clone(), self.digest_items[i].source.clone()));
+                                            }
+                                            if ui.small_button("📋").on_hover_text("Copy to clipboard").clicked() {
+                                                ui.ctx().copy_text(self.digest_items[i].content.clone());
+                                            }
+                                        });
+                                    });
+                                }
 
                                 ui.add_space(5.0);
                             }
@@ -122,6 +167,15 @@ impl TemplateApp {
                 let export_enabled = !self.digest_items.is_empty();
 
                 if ui.add_enabled(clear_enabled, egui::Button::new("Clear All")).clicked() {
+                    // Clear digest panel associations from database (soft delete)
+                    if let Some(ref db) = self.database {
+                        if let Err(e) = db.clear_digest_panel_associations() {
+                            log::error!("Failed to clear digest panel associations: {}", e);
+                            self.last_error = Some(format!("Database error: {}", e));
+                        }
+                    }
+
+                    // Clear UI state
                     self.digest_items.clear();
                 }
                 if ui.add_enabled(export_enabled, egui::Button::new("Export All to Clipboard.")).clicked() {

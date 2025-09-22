@@ -57,6 +57,7 @@ impl Database {
                 timestamp_unix INTEGER,
                 timestamp_display TEXT,
                 original_id TEXT UNIQUE,
+                is_active BOOLEAN DEFAULT 1,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )",
             [],
@@ -68,6 +69,7 @@ impl Database {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 content_id INTEGER NOT NULL,
                 panel_type TEXT NOT NULL,
+                is_active BOOLEAN DEFAULT 1,
                 added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (content_id) REFERENCES content_items(id),
                 UNIQUE(content_id, panel_type)
@@ -285,6 +287,36 @@ impl Database {
 
     pub fn get_database_path() -> PathBuf {
         Self::get_db_path()
+    }
+
+    pub fn clear_chat_panel_associations(&self) -> SqliteResult<()> {
+        // Remove all chat panel associations, keeping content_items intact
+        // This effectively "clears" the chat panel while preserving data
+        self.conn.execute(
+            "DELETE FROM panel_associations WHERE panel_type = 'chat'",
+            [],
+        )?;
+        Ok(())
+    }
+
+    pub fn clear_digest_panel_associations(&self) -> SqliteResult<()> {
+        // Remove all digest panel associations, keeping content_items intact
+        // This effectively "clears" the digest panel while preserving data
+        self.conn.execute(
+            "DELETE FROM panel_associations WHERE panel_type = 'digest'",
+            [],
+        )?;
+        Ok(())
+    }
+
+    pub fn clear_longterm_panel_associations(&self) -> SqliteResult<()> {
+        // Remove all longterm memory panel associations, keeping content_items intact
+        // This effectively "clears" the longterm memory panel while preserving data
+        self.conn.execute(
+            "DELETE FROM panel_associations WHERE panel_type = 'longterm'",
+            [],
+        )?;
+        Ok(())
     }
 
     fn insert_initial_roles_and_prompts(&self) -> SqliteResult<()> {

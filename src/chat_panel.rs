@@ -16,7 +16,25 @@ impl TemplateApp {
             .resizable(true)
             .show(ctx, |ui| {
                 // ui.add_space(6.0);
-                ui.heading("💬 Chat History");
+                ui.horizontal(|ui| {
+                    ui.heading("💬 Chat History");
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.button("🗑 Clear").on_hover_text("Clear all chat messages").clicked() {
+                            // Clear chat panel associations from database (soft delete)
+                            if let Some(ref db) = self.database {
+                                if let Err(e) = db.clear_chat_panel_associations() {
+                                    log::error!("Failed to clear chat panel associations: {}", e);
+                                    self.last_error = Some(format!("Database error: {}", e));
+                                }
+                            }
+
+                            // Clear UI state
+                            self.chat_messages.clear();
+                            self.current_response.clear();
+                            self.is_waiting_response = false;
+                        }
+                    });
+                });
 
                 // Search box
                 ui.horizontal(|ui| {
@@ -63,7 +81,7 @@ impl TemplateApp {
                                 let message = &self.chat_messages[i];
                                 if message.role == "user" {
                                     ui.vertical(|ui| {
-                                        ui.colored_label(egui::Color32::LIGHT_BLUE, "You:");
+                                        ui.colored_label(egui::Color32::DARK_RED, "You:");
                                         ui.scope(|ui| {
                                             ui.set_max_width(ui.available_width());
                                             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
