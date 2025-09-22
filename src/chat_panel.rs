@@ -1,4 +1,5 @@
 use crate::app::TemplateApp;
+use egui_commonmark::CommonMarkViewer;
 
 impl TemplateApp {
     pub fn render_chat_panel(
@@ -11,7 +12,7 @@ impl TemplateApp {
         egui::SidePanel::left("chat_history")
             .default_width(400.0)
             .min_width(300.0)
-            .max_width(600.0)
+            .max_width(900.0)
             .resizable(true)
             .show(ctx, |ui| {
                 // ui.add_space(6.0);
@@ -63,7 +64,11 @@ impl TemplateApp {
                                 if message.role == "user" {
                                     ui.vertical(|ui| {
                                         ui.colored_label(egui::Color32::LIGHT_BLUE, "You:");
-                                        ui.label(&message.content);
+                                        ui.scope(|ui| {
+                                            ui.set_max_width(ui.available_width());
+                                            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+                                            ui.label(&message.content);
+                                        });
 
                                         // Add buttons at the end of message
                                         ui.horizontal(|ui| {
@@ -92,11 +97,12 @@ impl TemplateApp {
                                         // Show streaming response for the last assistant message
                                         if !self.current_response.is_empty() {
                                             ui.vertical(|ui| {
-                                                ui.colored_label(
-                                                    egui::Color32::DARK_GREEN,
-                                                    &self.current_response,
-                                                );
-                                                // CommonMarkViewer::new().show(ui, &mut self.markdown_cache, &self.current_response);
+                                                ui.colored_label(egui::Color32::DARK_GREEN, "Assistant:");
+                                                ui.scope(|ui| {
+                                                    ui.set_max_width(ui.available_width());
+                                                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+                                                    CommonMarkViewer::new().max_image_width(Some(ui.available_width() as usize)).show(ui, &mut self.markdown_cache, &self.current_response);
+                                                });
 
                                                 // Add buttons at the end of streaming message
                                                 ui.horizontal(|ui| {
@@ -127,7 +133,12 @@ impl TemplateApp {
                                         }
                                     } else {
                                         ui.vertical(|ui| {
-                                            ui.label(&message.content);
+                                            ui.colored_label(egui::Color32::DARK_GREEN, "Assistant:");
+                                            ui.scope(|ui| {
+                                                ui.set_max_width(ui.available_width());
+                                                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+                                                CommonMarkViewer::new().show(ui, &mut self.markdown_cache, &message.content);
+                                            });
 
                                             // Add buttons at the end of message
                                             ui.horizontal(|ui| {

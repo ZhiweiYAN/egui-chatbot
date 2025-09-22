@@ -283,6 +283,10 @@ impl Database {
         Ok((total_content, chat_count, digest_count, longterm_count))
     }
 
+    pub fn get_database_path() -> PathBuf {
+        Self::get_db_path()
+    }
+
     fn insert_initial_roles_and_prompts(&self) -> SqliteResult<()> {
         // Check if roles already exist
         let role_count: usize = self.conn.query_row(

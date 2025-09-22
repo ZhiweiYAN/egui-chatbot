@@ -1146,6 +1146,18 @@ impl eframe::App for TemplateApp {
                     }
 
                     ui.separator();
+                    ui.heading("Database Information");
+                    ui.separator();
+
+                    // Display database path
+                    ui.horizontal(|ui| {
+                        ui.label("Database Path:");
+                        let db_path = crate::database::Database::get_database_path();
+                        ui.selectable_label(false, db_path.to_string_lossy().to_string())
+                            .on_hover_text("Click to select and copy the database path");
+                    });
+
+                    ui.separator();
                     ui.horizontal(|ui| {
                         if ui.button("Apply").clicked() {
                             // Apply settings
