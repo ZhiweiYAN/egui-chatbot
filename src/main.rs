@@ -20,7 +20,7 @@ async fn main() -> eframe::Result {
         ..Default::default()
     };
     eframe::run_native(
-        "EGUI Chat with Long Term Memory",
+        "EBot",
         native_options,
         Box::new(|cc| Ok(Box::new(eframe_template::TemplateApp::new(cc)))),
     )
