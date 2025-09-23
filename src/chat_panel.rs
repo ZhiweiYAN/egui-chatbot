@@ -8,11 +8,12 @@ impl TemplateApp {
     ) -> (Vec<(String, String)>, Vec<(String, String)>) {
         let mut digest_actions = Vec::new();
         let mut memory_actions = Vec::new();
+        let mut message_to_delete: Option<usize> = None;
 
         egui::SidePanel::left("chat_history")
             .default_width(400.0)
             .min_width(300.0)
-            .max_width(900.0)
+            .max_width(500.0)
             .resizable(true)
             .show(ctx, |ui| {
                 // ui.add_space(6.0);
@@ -93,6 +94,9 @@ impl TemplateApp {
                                             ui.with_layout(
                                                 egui::Layout::right_to_left(egui::Align::Center),
                                                 |ui| {
+                                                    if ui.small_button("🗑").on_hover_text("Delete message").clicked() {
+                                                        message_to_delete = Some(i);
+                                                    }
                                                     if ui.small_button("🗄 Memory").clicked() {
                                                         memory_actions.push((
                                                             message.content.clone(),
@@ -129,6 +133,9 @@ impl TemplateApp {
                                                             egui::Align::Center,
                                                         ),
                                                         |ui| {
+                                                            if ui.small_button("🗑").on_hover_text("Delete message").clicked() {
+                                                                message_to_delete = Some(i);
+                                                            }
                                                             if ui.small_button("🗄 Memory").clicked()
                                                             {
                                                                 memory_actions.push((
@@ -165,6 +172,9 @@ impl TemplateApp {
                                                         egui::Align::Center,
                                                     ),
                                                     |ui| {
+                                                        if ui.small_button("🗑").on_hover_text("Delete message").clicked() {
+                                                            message_to_delete = Some(i);
+                                                        }
                                                         if ui.small_button("🗄 Memory").clicked() {
                                                             memory_actions.push((
                                                                 message.content.clone(),
@@ -198,6 +208,11 @@ impl TemplateApp {
                 if self.should_scroll_chat {
                     scroll_output.state.offset.y = f32::INFINITY;
                     self.should_scroll_chat = false;
+                }
+
+                // Handle message deletion
+                if let Some(index) = message_to_delete {
+                    self.chat_messages.remove(index);
                 }
             });
 
