@@ -291,14 +291,36 @@ impl TemplateApp {
         let search_lower = search_term.to_lowercase();
         let text_lower = text.to_lowercase();
 
-        // Find all matches in the lowercased text
-        let mut matches = Vec::new();
-        let mut start_pos = 0;
+        // Simple and safe approach: work entirely with characters
+        let text_chars: Vec<char> = text.chars().collect();
+        let text_lower_chars: Vec<char> = text_lower.chars().collect();
+        let search_chars: Vec<char> = search_lower.chars().collect();
 
-        while let Some(match_pos) = text_lower[start_pos..].find(&search_lower) {
-            let absolute_pos = start_pos + match_pos;
-            matches.push(absolute_pos);
-            start_pos = absolute_pos + 1;
+        if search_chars.is_empty() {
+            ui.label(text);
+            return;
+        }
+
+        // Find all character-based matches
+        let mut matches = Vec::new();
+        let mut start_idx = 0;
+
+        while start_idx <= text_lower_chars.len().saturating_sub(search_chars.len()) {
+            // Check if we have a match at this position
+            let mut is_match = true;
+            for (i, &search_char) in search_chars.iter().enumerate() {
+                if start_idx + i >= text_lower_chars.len() || text_lower_chars[start_idx + i] != search_char {
+                    is_match = false;
+                    break;
+                }
+            }
+
+            if is_match {
+                matches.push((start_idx, start_idx + search_chars.len()));
+                start_idx += 1; // Move by 1 to find overlapping matches
+            } else {
+                start_idx += 1;
+            }
         }
 
         if matches.is_empty() {
@@ -306,69 +328,35 @@ impl TemplateApp {
             return;
         }
 
-        // Convert to character-based positions for safe slicing
-        let char_indices: Vec<(usize, char)> = text.char_indices().collect();
-        let text_chars: Vec<char> = text.chars().collect();
-        let search_chars: Vec<char> = search_term.chars().collect();
-
-        // Render text with highlights
+        // Render text with highlights using character positions
         ui.horizontal_wrapped(|ui| {
-            let mut last_char_idx = 0;
+            let mut last_pos = 0;
 
-            for &byte_match_pos in &matches {
-                // Find the character index that corresponds to this byte position
-                let char_match_pos = text_lower[..byte_match_pos].chars().count();
-
-                if char_match_pos >= text_chars.len() {
-                    continue;
-                }
-
-                // Render text before the match
-                if char_match_pos > last_char_idx {
-                    let start_byte = if last_char_idx < char_indices.len() {
-                        char_indices[last_char_idx].0
-                    } else {
-                        text.len()
-                    };
-                    let end_byte = if char_match_pos < char_indices.len() {
-                        char_indices[char_match_pos].0
-                    } else {
-                        text.len()
-                    };
-
-                    if start_byte < end_byte && end_byte <= text.len() {
-                        ui.label(&text[start_byte..end_byte]);
+            for (start, end) in matches {
+                // Render text before match
+                if start > last_pos {
+                    let before_text: String = text_chars[last_pos..start].iter().collect();
+                    if !before_text.is_empty() {
+                        ui.label(before_text);
                     }
                 }
 
-                // Render the highlighted match
-                let match_end_char = std::cmp::min(char_match_pos + search_chars.len(), text_chars.len());
-                if match_end_char > char_match_pos {
-                    let start_byte = char_indices[char_match_pos].0;
-                    let end_byte = if match_end_char < char_indices.len() {
-                        char_indices[match_end_char].0
-                    } else {
-                        text.len()
-                    };
-
-                    if start_byte < end_byte && end_byte <= text.len() {
-                        ui.colored_label(egui::Color32::DARK_RED, &text[start_byte..end_byte]);
+                // Render highlighted match
+                if end <= text_chars.len() {
+                    let match_text: String = text_chars[start..end].iter().collect();
+                    if !match_text.is_empty() {
+                        ui.colored_label(egui::Color32::DARK_RED, match_text);
                     }
                 }
 
-                last_char_idx = match_end_char;
+                last_pos = end;
             }
 
-            // Render remaining text after the last match
-            if last_char_idx < text_chars.len() {
-                let start_byte = if last_char_idx < char_indices.len() {
-                    char_indices[last_char_idx].0
-                } else {
-                    text.len()
-                };
-
-                if start_byte < text.len() {
-                    ui.label(&text[start_byte..]);
+            // Render remaining text
+            if last_pos < text_chars.len() {
+                let remaining_text: String = text_chars[last_pos..].iter().collect();
+                if !remaining_text.is_empty() {
+                    ui.label(remaining_text);
                 }
             }
         });
