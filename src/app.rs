@@ -282,6 +282,98 @@ impl TemplateApp {
         ctx.set_fonts(fonts);
     }
 
+    pub fn render_highlighted_text(&self, ui: &mut egui::Ui, text: &str, search_term: &str) {
+        if search_term.is_empty() {
+            ui.label(text);
+            return;
+        }
+
+        let search_lower = search_term.to_lowercase();
+        let text_lower = text.to_lowercase();
+
+        // Find all matches in the lowercased text
+        let mut matches = Vec::new();
+        let mut start_pos = 0;
+
+        while let Some(match_pos) = text_lower[start_pos..].find(&search_lower) {
+            let absolute_pos = start_pos + match_pos;
+            matches.push(absolute_pos);
+            start_pos = absolute_pos + 1;
+        }
+
+        if matches.is_empty() {
+            ui.label(text);
+            return;
+        }
+
+        // Convert to character-based positions for safe slicing
+        let char_indices: Vec<(usize, char)> = text.char_indices().collect();
+        let text_chars: Vec<char> = text.chars().collect();
+        let search_chars: Vec<char> = search_term.chars().collect();
+
+        // Render text with highlights
+        ui.horizontal_wrapped(|ui| {
+            let mut last_char_idx = 0;
+
+            for &byte_match_pos in &matches {
+                // Find the character index that corresponds to this byte position
+                let char_match_pos = text_lower[..byte_match_pos].chars().count();
+
+                if char_match_pos >= text_chars.len() {
+                    continue;
+                }
+
+                // Render text before the match
+                if char_match_pos > last_char_idx {
+                    let start_byte = if last_char_idx < char_indices.len() {
+                        char_indices[last_char_idx].0
+                    } else {
+                        text.len()
+                    };
+                    let end_byte = if char_match_pos < char_indices.len() {
+                        char_indices[char_match_pos].0
+                    } else {
+                        text.len()
+                    };
+
+                    if start_byte < end_byte && end_byte <= text.len() {
+                        ui.label(&text[start_byte..end_byte]);
+                    }
+                }
+
+                // Render the highlighted match
+                let match_end_char = std::cmp::min(char_match_pos + search_chars.len(), text_chars.len());
+                if match_end_char > char_match_pos {
+                    let start_byte = char_indices[char_match_pos].0;
+                    let end_byte = if match_end_char < char_indices.len() {
+                        char_indices[match_end_char].0
+                    } else {
+                        text.len()
+                    };
+
+                    if start_byte < end_byte && end_byte <= text.len() {
+                        ui.colored_label(egui::Color32::DARK_RED, &text[start_byte..end_byte]);
+                    }
+                }
+
+                last_char_idx = match_end_char;
+            }
+
+            // Render remaining text after the last match
+            if last_char_idx < text_chars.len() {
+                let start_byte = if last_char_idx < char_indices.len() {
+                    char_indices[last_char_idx].0
+                } else {
+                    text.len()
+                };
+
+                if start_byte < text.len() {
+                    ui.label(&text[start_byte..]);
+                }
+            }
+        });
+    }
+
     fn load_assistant_roles(&mut self) {
         if let Some(ref db) = self.database {
             // Load available roles
@@ -845,8 +937,12 @@ impl TemplateApp {
                                                                 ctx_clone.request_repaint();
                                                             }
                                                         }
+                                                        
                                                     }
+                                                    
+                                                    
                                                 }
+                                                
                                             }
                                         }
                                     }

@@ -60,6 +60,7 @@ impl TemplateApp {
                         );
                     } else {
                         let search_term = self.chat_search.to_lowercase();
+                        let search_query = self.chat_search.clone(); // Keep original case for highlighting
                         let filtered_indices: Vec<usize> = self
                             .chat_messages
                             .iter()
@@ -80,13 +81,16 @@ impl TemplateApp {
                         } else {
                             for i in filtered_indices {
                                 let message = &self.chat_messages[i];
-                                if message.role == "user" {
+                                let message_content = message.content.clone(); // Clone to avoid borrowing issues
+                                let message_role = message.role.clone();
+
+                                if message_role == "user" {
                                     ui.vertical(|ui| {
                                         ui.colored_label(egui::Color32::DARK_RED, "You:");
                                         ui.scope(|ui| {
                                             ui.set_max_width(ui.available_width());
                                             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
-                                            ui.label(&message.content);
+                                            self.render_highlighted_text(ui, &message_content, &search_query);
                                         });
 
                                         // Add buttons at the end of message
@@ -99,21 +103,21 @@ impl TemplateApp {
                                                     }
                                                     if ui.small_button("🗄 Memory").clicked() {
                                                         memory_actions.push((
-                                                            message.content.clone(),
-                                                            message.role.clone(),
+                                                            message_content.clone(),
+                                                            message_role.clone(),
                                                         ));
                                                     }
                                                     if ui.button("📌 Digest").clicked() {
                                                         digest_actions.push((
-                                                            message.content.clone(),
-                                                            message.role.clone(),
+                                                            message_content.clone(),
+                                                            message_role.clone(),
                                                         ));
                                                     }
                                                 },
                                             );
                                         });
                                     });
-                                } else if message.role == "assistant" {
+                                } else if message_role == "assistant" {
                                     if i == self.chat_messages.len() - 1 && self.is_waiting_response
                                     {
                                         // Show streaming response for the last assistant message
@@ -123,7 +127,11 @@ impl TemplateApp {
                                                 ui.scope(|ui| {
                                                     ui.set_max_width(ui.available_width());
                                                     ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
-                                                    CommonMarkViewer::new().max_image_width(Some(ui.available_width() as usize)).show(ui, &mut self.markdown_cache, &self.current_response);
+                                                    if search_query.is_empty() {
+                                                        CommonMarkViewer::new().max_image_width(Some(ui.available_width() as usize)).show(ui, &mut self.markdown_cache, &self.current_response);
+                                                    } else {
+                                                        self.render_highlighted_text(ui, &self.current_response, &search_query);
+                                                    }
                                                 });
 
                                                 // Add buttons at the end of streaming message
@@ -162,7 +170,11 @@ impl TemplateApp {
                                             ui.scope(|ui| {
                                                 ui.set_max_width(ui.available_width());
                                                 ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
-                                                CommonMarkViewer::new().show(ui, &mut self.markdown_cache, &message.content);
+                                                if search_query.is_empty() {
+                                                    CommonMarkViewer::new().show(ui, &mut self.markdown_cache, &message_content);
+                                                } else {
+                                                    self.render_highlighted_text(ui, &message_content, &search_query);
+                                                }
                                             });
 
                                             // Add buttons at the end of message
@@ -177,14 +189,14 @@ impl TemplateApp {
                                                         }
                                                         if ui.small_button("🗄 Memory").clicked() {
                                                             memory_actions.push((
-                                                                message.content.clone(),
-                                                                message.role.clone(),
+                                                                message_content.clone(),
+                                                                message_role.clone(),
                                                             ));
                                                         }
                                                         if ui.button("📌 Digest").clicked() {
                                                             digest_actions.push((
-                                                                message.content.clone(),
-                                                                message.role.clone(),
+                                                                message_content.clone(),
+                                                                message_role.clone(),
                                                             ));
                                                         }
                                                     },

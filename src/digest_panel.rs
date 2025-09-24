@@ -51,6 +51,7 @@ impl TemplateApp {
                         ui.colored_label(egui::Color32::GRAY, "No digest items yet.\nClick '📌 Digest' on chat messages to collect important content.");
                     } else {
                         let search_term = self.digest_search.to_lowercase();
+                        let search_query = self.digest_search.clone(); // Keep original case for highlighting
                         let filtered_indices: Vec<usize> = self.digest_items
                             .iter()
                             .enumerate()
@@ -91,10 +92,16 @@ impl TemplateApp {
 
                                             // Content
                                             if self.digest_items[i].source == "user" {
-                                                ui.label(&self.digest_items[i].content);
+                                                self.render_highlighted_text(ui, &self.digest_items[i].content, &search_query);
                                             } else {
-                                                // Render assistant messages as markdown in digest panel
-                                                CommonMarkViewer::new().show(ui, &mut self.markdown_cache, &self.digest_items[i].content);
+                                                // For assistant messages, use highlighting if there's a search term, otherwise use markdown
+                                                if search_query.is_empty() {
+                                                    // Render assistant messages as markdown in digest panel
+                                                    CommonMarkViewer::new().show(ui, &mut self.markdown_cache, &self.digest_items[i].content);
+                                                } else {
+                                                    // Render with highlighting (plain text)
+                                                    self.render_highlighted_text(ui, &self.digest_items[i].content, &search_query);
+                                                }
                                             }
 
                                             // Action buttons at the end
@@ -125,10 +132,16 @@ impl TemplateApp {
 
                                     // Content
                                     if self.digest_items[i].source == "user" {
-                                        ui.label(&self.digest_items[i].content);
+                                        self.render_highlighted_text(ui, &self.digest_items[i].content, &search_query);
                                     } else {
-                                        // Render assistant messages as markdown in digest panel
-                                        CommonMarkViewer::new().show(ui, &mut self.markdown_cache, &self.digest_items[i].content);
+                                        // For assistant messages, use highlighting if there's a search term, otherwise use markdown
+                                        if search_query.is_empty() {
+                                            // Render assistant messages as markdown in digest panel
+                                            CommonMarkViewer::new().show(ui, &mut self.markdown_cache, &self.digest_items[i].content);
+                                        } else {
+                                            // Render with highlighting (plain text)
+                                            self.render_highlighted_text(ui, &self.digest_items[i].content, &search_query);
+                                        }
                                     }
 
                                     // Action buttons at the end

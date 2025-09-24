@@ -53,6 +53,7 @@ impl TemplateApp {
                             ui.colored_label(egui::Color32::GRAY, "No memory items yet.\nClick 'M Memory' on chat messages to store important content.");
                         } else {
                             let search_term = self.memory_search.to_lowercase();
+                            let search_query = self.memory_search.clone(); // Keep original case for highlighting
                             let filtered_indices: Vec<usize> = self.long_term_memory_items
                                 .iter()
                                 .enumerate()
@@ -93,10 +94,16 @@ impl TemplateApp {
 
                                                 // Content
                                                 if self.long_term_memory_items[i].source == "user" {
-                                                    ui.label(&self.long_term_memory_items[i].content);
+                                                    self.render_highlighted_text(ui, &self.long_term_memory_items[i].content, &search_query);
                                                 } else {
-                                                    // Render assistant messages as markdown in long term memory panel
-                                                    CommonMarkViewer::new().show(ui, &mut self.markdown_cache, &self.long_term_memory_items[i].content);
+                                                    // For assistant messages, use highlighting if there's a search term, otherwise use markdown
+                                                    if search_query.is_empty() {
+                                                        // Render assistant messages as markdown in long term memory panel
+                                                        CommonMarkViewer::new().show(ui, &mut self.markdown_cache, &self.long_term_memory_items[i].content);
+                                                    } else {
+                                                        // Render with highlighting (plain text)
+                                                        self.render_highlighted_text(ui, &self.long_term_memory_items[i].content, &search_query);
+                                                    }
                                                 }
 
                                                 // Action buttons at the end
@@ -124,10 +131,16 @@ impl TemplateApp {
 
                                         // Content
                                         if self.long_term_memory_items[i].source == "user" {
-                                            ui.label(&self.long_term_memory_items[i].content);
+                                            self.render_highlighted_text(ui, &self.long_term_memory_items[i].content, &search_query);
                                         } else {
-                                            // Render assistant messages as markdown in long term memory panel
-                                            CommonMarkViewer::new().show(ui, &mut self.markdown_cache, &self.long_term_memory_items[i].content);
+                                            // For assistant messages, use highlighting if there's a search term, otherwise use markdown
+                                            if search_query.is_empty() {
+                                                // Render assistant messages as markdown in long term memory panel
+                                                CommonMarkViewer::new().show(ui, &mut self.markdown_cache, &self.long_term_memory_items[i].content);
+                                            } else {
+                                                // Render with highlighting (plain text)
+                                                self.render_highlighted_text(ui, &self.long_term_memory_items[i].content, &search_query);
+                                            }
                                         }
 
                                         // Action buttons at the end
