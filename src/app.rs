@@ -119,7 +119,7 @@ impl Default for TemplateApp {
             chat_messages: Vec::new(),
 
             // Information display
-            info_text: "DeepSeek Chat API Integration\nModel: deepseek-chat\nStreaming: Enabled\n中文支持: 已启用 (Chinese Support: Enabled)".to_owned(),
+            info_text: "DeepSeek Chat API Integration\nModel: deepseek-chat\nStreaming: Enabled\n中文支持: 已启用 (Chinese Support: Enabled)\n测试字符: 杂 (Test character: 杂)".to_owned(),
 
             // API configuration from environment variables
             api_base_url: std::env::var("LLM_BASE_URL")
@@ -234,26 +234,31 @@ impl TemplateApp {
         }
         // Fallback: try to load other system Chinese fonts
         else {
-            // Try macOS fonts
-            for font_path in [
-                "/System/Library/Fonts/PingFang.ttc",
-                "/System/Library/Fonts/Hiragino Sans GB.ttc",
-                "/Library/Fonts/Arial Unicode.ttf",
-            ] {
-                if let Ok(font_data) = std::fs::read(font_path) {
-                    let font_name = format!("SystemFont{}", fonts.font_data.len());
-                    fonts.font_data.insert(
-                        font_name.clone(),
-                        egui::FontData::from_owned(font_data).into(),
-                    );
+            // Try to load PingFang.ttc - it should work with the entire collection
+            if let Ok(font_data) = std::fs::read("/System/Library/Fonts/PingFang.ttc") {
+                // Load the entire PingFang TrueType Collection as PingFangSC
+                let egui_font_data = egui::FontData::from_owned(font_data);
 
-                    fonts
-                        .families
-                        .entry(egui::FontFamily::Proportional)
-                        .or_default()
-                        .insert(0, font_name.clone());
-                    break;
-                }
+                fonts.font_data.insert(
+                    "PingFangSC".to_string(),
+                    egui_font_data.into(),
+                );
+
+                fonts
+                    .families
+                    .entry(egui::FontFamily::Proportional)
+                    .or_default()
+                    .insert(0, "PingFangSC".to_string());
+
+                fonts
+                    .families
+                    .entry(egui::FontFamily::Monospace)
+                    .or_default()
+                    .insert(0, "PingFangSC".to_string());
+
+                log::info!("Loaded PingFangSC from PingFang.ttc");
+            } else {
+                log::warn!("Could not load PingFang.ttc");
             }
 
             // Try Linux fonts

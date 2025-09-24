@@ -87,7 +87,12 @@ impl TemplateApp {
                                 if message_role == "user" {
                                     ui.vertical(|ui| {
                                         ui.colored_label(egui::Color32::DARK_RED, "You:");
-                                        ui.scope(|ui| {
+                                        // Add background frame for user messages
+                                        let frame = egui::Frame::new()
+                                            .fill(egui::Color32::from_rgb(238, 235, 226))
+                                            .corner_radius(4.0)
+                                            .inner_margin(8.0);
+                                        frame.show(ui, |ui| {
                                             ui.set_max_width(ui.available_width());
                                             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
                                             self.render_highlighted_text(ui, &message_content, &search_query);
@@ -123,7 +128,6 @@ impl TemplateApp {
                                         // Show streaming response for the last assistant message
                                         if !self.current_response.is_empty() {
                                             ui.vertical(|ui| {
-                                                ui.colored_label(egui::Color32::DARK_GREEN, "Assistant:");
                                                 ui.scope(|ui| {
                                                     ui.set_max_width(ui.available_width());
                                                     ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
@@ -166,7 +170,6 @@ impl TemplateApp {
                                         }
                                     } else {
                                         ui.vertical(|ui| {
-                                            ui.colored_label(egui::Color32::DARK_GREEN, "Assistant:");
                                             ui.scope(|ui| {
                                                 ui.set_max_width(ui.available_width());
                                                 ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
