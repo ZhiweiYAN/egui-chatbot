@@ -6,6 +6,16 @@ edition = "2024"
 include = ["LICENSE-APACHE", "LICENSE-MIT", "**/*.rs", "Cargo.toml"]
 rust-version = "1.85"
 
+[package.metadata.bundle]
+name = "egui-chatbot"
+identifier = "com.example.egui-chatbot"
+icon = ["assets/AppIcon.icns"]
+version = "1.0.0"
+resources = ["assets"]
+copyright = "Copyright (c) 2024"
+category = "Developer Tool"
+short_description = "A chatbot application built with egui"
+
 [package.metadata.docs.rs]
 all-features = true
 targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
