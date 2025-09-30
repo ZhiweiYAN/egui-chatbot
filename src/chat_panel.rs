@@ -132,7 +132,9 @@ impl TemplateApp {
                                                     ui.set_max_width(ui.available_width());
                                                     ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
                                                     if search_query.is_empty() {
-                                                        CommonMarkViewer::new().max_image_width(Some(ui.available_width() as usize)).show(ui, &mut self.markdown_cache, &self.current_response);
+                                                        CommonMarkViewer::new()
+                                                        .max_image_width(Some(ui.available_width() as usize))
+                                                        .show(ui, &mut self.markdown_cache, &self.current_response);
                                                     } else {
                                                         self.render_highlighted_text(ui, &self.current_response, &search_query);
                                                     }

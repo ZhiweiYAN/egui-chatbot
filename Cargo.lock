@@ -888,6 +888,7 @@ dependencies = [
  "chrono",
  "eframe",
  "egui",
+ "egui-phosphor",
  "egui_commonmark",
  "env_logger",
  "futures",
@@ -920,6 +921,15 @@ dependencies = [
  "serde",
  "smallvec",
  "unicode-segmentation",
+]
+
+[[package]]
+name = "egui-phosphor"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "80049258178b29a9807b15b5bcf3d60722a22a91d03bc9316935dec5ed5ed2e0"
+dependencies = [
+ "egui",
 ]
 
 [[package]]

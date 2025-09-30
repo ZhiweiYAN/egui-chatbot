@@ -209,6 +209,7 @@ impl TemplateApp {
     fn configure_fonts(ctx: &egui::Context) {
         let mut fonts = egui::FontDefinitions::default();
 
+        egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
         // Try to load system fonts that support Chinese characters
         // Priority order: Microsoft YaHei, SimHei, Noto Sans CJK, fallback to built-in fonts
 
@@ -283,6 +284,7 @@ impl TemplateApp {
                 }
             }
         }
+
 
         ctx.set_fonts(fonts);
     }
@@ -1147,14 +1149,34 @@ impl eframe::App for TemplateApp {
                         if let Some((_, _, display_name, _)) = self.available_roles
                             .iter()
                             .find(|(id, _, _, _)| *id == role_id) {
-                            // Add background frame for better visibility
-                            let frame = egui::Frame::new()
-                                .fill(egui::Color32::from_rgb(230, 245, 255))
-                                .corner_radius(6.0)
-                                .inner_margin(egui::Margin::symmetric(8, 4));
-                            frame.show(ui, |ui| {
-                                ui.colored_label(egui::Color32::from_rgb(0, 102, 204), format!("👤 {}", display_name));
-                            });
+                            // Clone available roles to avoid borrowing issues
+                            let available_roles = self.available_roles.clone();
+                            let current_role_id = self.current_assistant_role_id;
+
+                            // Use ComboBox for role selection
+                            let mut role_changed = None;
+                            // ui.label(egui::RichText::new(egui_phosphor::regular::USER_LIST).size(32.0));
+                            egui::ComboBox::from_id_salt("role_selector")
+                                // .on_hover_text("Select Assistant Role")
+                                .selected_text(format!("👥 {} {}", display_name, egui_phosphor::regular::USER_LIST))
+                                .show_ui(ui, |ui| {
+                                    for (available_role_id, _role_name, available_display_name, description) in &available_roles {
+                                        let is_selected = current_role_id == Some(*available_role_id);
+                                        let response = ui.selectable_label(is_selected, available_display_name);
+                                        if response.clicked() && !is_selected {
+                                            role_changed = Some(*available_role_id);
+                                        }
+                                        if response.hovered() {
+                                            response.on_hover_text(description);
+                                        }
+                                    }
+                                });
+
+                            // Apply role change after the closure
+                            if let Some(new_role_id) = role_changed {
+                                self.current_assistant_role_id = Some(new_role_id);
+                                self.load_system_prompts_for_current_role();
+                            }
                         } else {
                             let frame = egui::Frame::new()
                                 .fill(egui::Color32::from_rgb(255, 240, 240))
@@ -1170,13 +1192,29 @@ impl eframe::App for TemplateApp {
                             self.load_system_prompts_for_current_role();
                         }
                     } else {
-                        let frame = egui::Frame::new()
-                            .fill(egui::Color32::from_rgb(248, 248, 248))
-                            .corner_radius(6.0)
-                            .inner_margin(egui::Margin::symmetric(8, 4));
-                        frame.show(ui, |ui| {
-                            ui.colored_label(egui::Color32::from_rgb(128, 128, 128), "👤 No Role Selected");
-                        });
+                        // Show role selector even when no role is selected
+                        let available_roles = self.available_roles.clone();
+                        let mut role_changed = None;
+
+                        egui::ComboBox::from_id_salt("role_selector_empty")
+                            .selected_text("👤 No Role Selected")
+                            .show_ui(ui, |ui| {
+                                for (available_role_id, _role_name, available_display_name, description) in &available_roles {
+                                    let response = ui.selectable_label(false, available_display_name);
+                                    if response.clicked() {
+                                        role_changed = Some(*available_role_id);
+                                    }
+                                    if response.hovered() {
+                                        response.on_hover_text(description);
+                                    }
+                                }
+                            });
+
+                        // Apply role change after the closure
+                        if let Some(new_role_id) = role_changed {
+                            self.current_assistant_role_id = Some(new_role_id);
+                            self.load_system_prompts_for_current_role();
+                        }
 
                         // Add disabled reload button when no role selected
                         ui.add_enabled(false, egui::Button::new("🔄 Reload").small())
