@@ -1,5 +1,5 @@
 use crate::app::{ChatMessage, DigestItem, LongTermMemoryItem};
-use rusqlite::{Connection, OptionalExtension, Result as SqliteResult, params};
+use rusqlite::{Connection, OptionalExtension as _, Result as SqliteResult, params};
 use std::path::PathBuf;
 use uuid::Uuid;
 
@@ -17,7 +17,7 @@ impl Database {
         }
 
         let conn = Connection::open(&db_path)?;
-        let db = Database { conn };
+        let db = Self { conn };
         db.initialize_tables()?;
         Ok(db)
     }
@@ -27,11 +27,11 @@ impl Database {
         let mut path = if cfg!(target_os = "windows") {
             std::env::var("APPDATA")
                 .map(PathBuf::from)
-                .unwrap_or_else(|_| std::env::current_dir().unwrap())
+                .unwrap_or_else(|_| std::env::current_dir().expect("Failed to get current directory"))
         } else if cfg!(target_os = "macos") {
             std::env::var("HOME")
                 .map(|home| PathBuf::from(home).join("Library/Application Support"))
-                .unwrap_or_else(|_| std::env::current_dir().unwrap())
+                .unwrap_or_else(|_| std::env::current_dir().expect("Failed to get current directory"))
         } else {
             // Linux and others
             std::env::var("XDG_DATA_HOME")
@@ -39,7 +39,7 @@ impl Database {
                 .or_else(|_| {
                     std::env::var("HOME").map(|home| PathBuf::from(home).join(".local/share"))
                 })
-                .unwrap_or_else(|_| std::env::current_dir().unwrap())
+                .unwrap_or_else(|_| std::env::current_dir().expect("Failed to get current directory"))
         };
 
         path.push("egui-chatbot");
@@ -321,11 +321,9 @@ impl Database {
 
     fn insert_initial_roles_and_prompts(&self) -> SqliteResult<()> {
         // Check if roles already exist
-        let role_count: usize = self.conn.query_row(
-            "SELECT COUNT(*) FROM assistant_roles",
-            [],
-            |row| row.get(0),
-        )?;
+        let role_count: usize =
+            self.conn
+                .query_row("SELECT COUNT(*) FROM assistant_roles", [], |row| row.get(0))?;
 
         if role_count > 0 {
             return Ok(()); // Already initialized
@@ -436,16 +434,16 @@ impl Database {
         Ok(roles)
     }
 
-    pub fn get_system_prompts_for_role(&self, role_id: i64) -> SqliteResult<std::collections::HashMap<String, String>> {
+    pub fn get_system_prompts_for_role(
+        &self,
+        role_id: i64,
+    ) -> SqliteResult<std::collections::HashMap<String, String>> {
         let mut stmt = self.conn.prepare(
             "SELECT panel_type, prompt_text FROM system_prompts WHERE role_id = ? AND is_active = 1"
         )?;
 
         let rows = stmt.query_map([role_id], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-            ))
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })?;
 
         let mut prompts = std::collections::HashMap::new();

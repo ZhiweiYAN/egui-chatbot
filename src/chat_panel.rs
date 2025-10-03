@@ -1,11 +1,14 @@
 use crate::app::TemplateApp;
 use egui_commonmark::CommonMarkViewer;
 
+type ActionList = Vec<(String, String)>;
+
 impl TemplateApp {
+    #[expect(clippy::too_many_lines)]
     pub fn render_chat_panel(
         &mut self,
         ctx: &egui::Context,
-    ) -> (Vec<(String, String)>, Vec<(String, String)>) {
+    ) -> (ActionList, ActionList) {
         let mut digest_actions = Vec::new();
         let mut memory_actions = Vec::new();
         let mut message_to_delete: Option<usize> = None;
@@ -20,12 +23,16 @@ impl TemplateApp {
                 ui.horizontal(|ui| {
                     ui.heading("💬 Chat History");
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("🗑 Clear").on_hover_text("Clear all chat messages").clicked() {
+                        if ui
+                            .button("🗑 Clear")
+                            .on_hover_text("Clear all chat messages")
+                            .clicked()
+                        {
                             // Clear chat panel associations from database (soft delete)
                             if let Some(ref db) = self.database {
                                 if let Err(e) = db.clear_chat_panel_associations() {
-                                    log::error!("Failed to clear chat panel associations: {}", e);
-                                    self.last_error = Some(format!("Database error: {}", e));
+                                    log::error!("Failed to clear chat panel associations: {e}");
+                                    self.last_error = Some(format!("Database error: {e}"));
                                 }
                             }
 
@@ -94,8 +101,13 @@ impl TemplateApp {
                                             .inner_margin(8.0);
                                         frame.show(ui, |ui| {
                                             ui.set_max_width(ui.available_width());
-                                            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
-                                            self.render_highlighted_text(ui, &message_content, &search_query);
+                                            ui.style_mut().wrap_mode =
+                                                Some(egui::TextWrapMode::Wrap);
+                                            self.render_highlighted_text(
+                                                ui,
+                                                &message_content,
+                                                &search_query,
+                                            );
                                         });
 
                                         // Add buttons at the end of message
@@ -103,7 +115,11 @@ impl TemplateApp {
                                             ui.with_layout(
                                                 egui::Layout::right_to_left(egui::Align::Center),
                                                 |ui| {
-                                                    if ui.small_button("🗑").on_hover_text("Delete message").clicked() {
+                                                    if ui
+                                                        .small_button("🗑")
+                                                        .on_hover_text("Delete message")
+                                                        .clicked()
+                                                    {
                                                         message_to_delete = Some(i);
                                                     }
                                                     if ui.small_button("🗄 Memory").clicked() {
@@ -130,13 +146,24 @@ impl TemplateApp {
                                             ui.vertical(|ui| {
                                                 ui.scope(|ui| {
                                                     ui.set_max_width(ui.available_width());
-                                                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+                                                    ui.style_mut().wrap_mode =
+                                                        Some(egui::TextWrapMode::Wrap);
                                                     if search_query.is_empty() {
                                                         CommonMarkViewer::new()
-                                                        .max_image_width(Some(ui.available_width() as usize))
-                                                        .show(ui, &mut self.markdown_cache, &self.current_response);
+                                                            .max_image_width(Some(
+                                                                ui.available_width() as usize,
+                                                            ))
+                                                            .show(
+                                                                ui,
+                                                                &mut self.markdown_cache,
+                                                                &self.current_response,
+                                                            );
                                                     } else {
-                                                        self.render_highlighted_text(ui, &self.current_response, &search_query);
+                                                        self.render_highlighted_text(
+                                                            ui,
+                                                            &self.current_response,
+                                                            &search_query,
+                                                        );
                                                     }
                                                 });
 
@@ -147,20 +174,24 @@ impl TemplateApp {
                                                             egui::Align::Center,
                                                         ),
                                                         |ui| {
-                                                            if ui.small_button("🗑").on_hover_text("Delete message").clicked() {
+                                                            if ui
+                                                                .small_button("🗑")
+                                                                .on_hover_text("Delete message")
+                                                                .clicked()
+                                                            {
                                                                 message_to_delete = Some(i);
                                                             }
                                                             if ui.small_button("🗄 Memory").clicked()
                                                             {
                                                                 memory_actions.push((
                                                                     self.current_response.clone(),
-                                                                    "assistant".to_string(),
+                                                                    "assistant".to_owned(),
                                                                 ));
                                                             }
                                                             if ui.button("📌 Digest").clicked() {
                                                                 digest_actions.push((
                                                                     self.current_response.clone(),
-                                                                    "assistant".to_string(),
+                                                                    "assistant".to_owned(),
                                                                 ));
                                                             }
                                                         },
@@ -174,11 +205,20 @@ impl TemplateApp {
                                         ui.vertical(|ui| {
                                             ui.scope(|ui| {
                                                 ui.set_max_width(ui.available_width());
-                                                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+                                                ui.style_mut().wrap_mode =
+                                                    Some(egui::TextWrapMode::Wrap);
                                                 if search_query.is_empty() {
-                                                    CommonMarkViewer::new().show(ui, &mut self.markdown_cache, &message_content);
+                                                    CommonMarkViewer::new().show(
+                                                        ui,
+                                                        &mut self.markdown_cache,
+                                                        &message_content,
+                                                    );
                                                 } else {
-                                                    self.render_highlighted_text(ui, &message_content, &search_query);
+                                                    self.render_highlighted_text(
+                                                        ui,
+                                                        &message_content,
+                                                        &search_query,
+                                                    );
                                                 }
                                             });
 
@@ -189,10 +229,15 @@ impl TemplateApp {
                                                         egui::Align::Center,
                                                     ),
                                                     |ui| {
-                                                        if ui.small_button("🗑").on_hover_text("Delete message").clicked() {
+                                                        if ui
+                                                            .small_button("🗑")
+                                                            .on_hover_text("Delete message")
+                                                            .clicked()
+                                                        {
                                                             message_to_delete = Some(i);
                                                         }
-                                                        if ui.small_button("🗄 Memory").clicked() {
+                                                        if ui.small_button("🗄 Memory").clicked()
+                                                        {
                                                             memory_actions.push((
                                                                 message_content.clone(),
                                                                 message_role.clone(),
@@ -217,7 +262,7 @@ impl TemplateApp {
                     }
 
                     if let Some(error) = &self.last_error {
-                        ui.colored_label(egui::Color32::RED, format!("Error: {}", error));
+                        ui.colored_label(egui::Color32::RED, format!("Error: {error}"));
                     }
                 });
 

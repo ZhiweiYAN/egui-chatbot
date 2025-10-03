@@ -2,6 +2,7 @@ use crate::app::TemplateApp;
 use egui_commonmark::CommonMarkViewer;
 
 impl TemplateApp {
+    #[expect(clippy::too_many_lines)]
     pub fn render_digest_panel(&mut self, ctx: &egui::Context) -> Vec<(String, String)> {
         let mut memory_actions = Vec::new();
 
@@ -13,11 +14,11 @@ impl TemplateApp {
                     let selected_count = self.digest_items.iter().filter(|item| item.selected).count();
                     let summary_enabled = selected_count > 0 && !self.is_waiting_response;
                     let button_text = if self.is_waiting_response {
-                        "LLM Processing...".to_string()
+                        "LLM Processing...".to_owned()
                     } else if selected_count > 0 {
-                        format!("📄 Summary ({})", selected_count)
+                        format!("📄 Summary ({selected_count})")
                     } else {
-                        "📄 Summary".to_string()
+                        "📄 Summary".to_owned()
                     };
 
                     if ui.add_enabled(summary_enabled, egui::Button::new(button_text))
@@ -83,9 +84,10 @@ impl TemplateApp {
                                             // Header with checkbox, label, and timestamp
                                             ui.horizontal(|ui| {
                                                 ui.checkbox(&mut self.digest_items[i].selected, "");
+                                                let source_label = if self.digest_items[i].source == "user" { "You" } else { "Assistant" };
                                                 ui.colored_label(
                                                     if self.digest_items[i].source == "user" { egui::Color32::DARK_RED } else { egui::Color32::DARK_GREEN },
-                                                    &format!("{}:", if self.digest_items[i].source == "user" { "You" } else { "Assistant" })
+                                                    format!("{source_label}:")
                                                 );
                                                 ui.label(&self.digest_items[i].timestamp);
                                             });
@@ -123,9 +125,10 @@ impl TemplateApp {
                                     // Header with checkbox, label, and timestamp
                                     ui.horizontal(|ui| {
                                         ui.checkbox(&mut self.digest_items[i].selected, "");
+                                        let source_label = if self.digest_items[i].source == "user" { "You" } else { "Assistant" };
                                         ui.colored_label(
                                             if self.digest_items[i].source == "user" { egui::Color32::DARK_RED } else { egui::Color32::DARK_GREEN },
-                                            &format!("{}:", if self.digest_items[i].source == "user" { "You" } else { "Assistant" })
+                                            format!("{source_label}:")
                                         );
                                         ui.label(&self.digest_items[i].timestamp);
                                     });
@@ -183,8 +186,8 @@ impl TemplateApp {
                     // Clear digest panel associations from database (soft delete)
                     if let Some(ref db) = self.database {
                         if let Err(e) = db.clear_digest_panel_associations() {
-                            log::error!("Failed to clear digest panel associations: {}", e);
-                            self.last_error = Some(format!("Database error: {}", e));
+                            log::error!("Failed to clear digest panel associations: {e}");
+                            self.last_error = Some(format!("Database error: {e}"));
                         }
                     }
 

@@ -1,6 +1,6 @@
 use crate::database::Database;
 use egui_commonmark::CommonMarkCache;
-use futures::StreamExt;
+use futures::StreamExt as _;
 use std::sync::mpsc;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -123,11 +123,11 @@ impl Default for TemplateApp {
 
             // API configuration from environment variables
             api_base_url: std::env::var("LLM_BASE_URL")
-                .unwrap_or_else(|_| "https://api.deepseek.com".to_string()),
+                .unwrap_or_else(|_| "https://api.deepseek.com".to_owned()),
             api_key: std::env::var("LLM_API_KEY")
-                .unwrap_or_else(|_| "".to_string()),
+                .unwrap_or_else(|_| String::new()),
             model: std::env::var("LLM_MODEL")
-                .unwrap_or_else(|_| "deepseek-chat".to_string()),
+                .unwrap_or_else(|_| "deepseek-chat".to_owned()),
 
             // Streaming state
             streaming_receiver: None,
@@ -156,11 +156,11 @@ impl Default for TemplateApp {
             // Settings window
             show_settings: false,
             temp_api_base_url: std::env::var("LLM_BASE_URL")
-                .unwrap_or_else(|_| "https://api.deepseek.com".to_string()),
+                .unwrap_or_else(|_| "https://api.deepseek.com".to_owned()),
             temp_api_key: std::env::var("LLM_API_KEY")
-                .unwrap_or_else(|_| "".to_string()),
+                .unwrap_or_else(|_| String::new()),
             temp_model: std::env::var("LLM_MODEL")
-                .unwrap_or_else(|_| "deepseek-chat".to_string()),
+                .unwrap_or_else(|_| "deepseek-chat".to_owned()),
 
             // Assistant role management
             current_assistant_role_id: None,
@@ -184,14 +184,14 @@ impl TemplateApp {
         let database = match Database::new() {
             Ok(db) => Some(db),
             Err(e) => {
-                log::error!("Failed to initialize database: {}", e);
+                log::error!("Failed to initialize database: {e}");
                 None
             }
         };
 
         // Load previous app state (if any).
         // Note that you must enable the `persistence` feature for this to work.
-        let mut app: TemplateApp = if let Some(storage) = cc.storage {
+        let mut app: Self = if let Some(storage) = cc.storage {
             eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default()
         } else {
             Default::default()
@@ -240,22 +240,21 @@ impl TemplateApp {
                 // Load the entire PingFang TrueType Collection as PingFangSC
                 let egui_font_data = egui::FontData::from_owned(font_data);
 
-                fonts.font_data.insert(
-                    "PingFangSC".to_string(),
-                    egui_font_data.into(),
-                );
+                fonts
+                    .font_data
+                    .insert("PingFangSC".to_owned(), egui_font_data.into());
 
                 fonts
                     .families
                     .entry(egui::FontFamily::Proportional)
                     .or_default()
-                    .insert(0, "PingFangSC".to_string());
+                    .insert(0, "PingFangSC".to_owned());
 
                 fonts
                     .families
                     .entry(egui::FontFamily::Monospace)
                     .or_default()
-                    .insert(0, "PingFangSC".to_string());
+                    .insert(0, "PingFangSC".to_owned());
 
                 log::info!("Loaded PingFangSC from PingFang.ttc");
             } else {
@@ -263,15 +262,19 @@ impl TemplateApp {
             }
 
             // Try Linux fonts
-            for font_path in [
+            let linux_font_paths = [
+                "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
                 "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
-                "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
                 "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-            ] {
+                "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+                "/usr/share/fonts/wqy-microhei/wqy-microhei.ttc",
+            ];
+
+            let mut font_loaded = false;
+            for font_path in linux_font_paths {
                 if let Ok(font_data) = std::fs::read(font_path) {
-                    let font_name = format!("SystemFont{}", fonts.font_data.len());
                     fonts.font_data.insert(
-                        font_name.clone(),
+                        "CJKFont".to_owned(),
                         egui::FontData::from_owned(font_data).into(),
                     );
 
@@ -279,12 +282,24 @@ impl TemplateApp {
                         .families
                         .entry(egui::FontFamily::Proportional)
                         .or_default()
-                        .insert(0, font_name.clone());
+                        .insert(0, "CJKFont".to_owned());
+
+                    fonts
+                        .families
+                        .entry(egui::FontFamily::Monospace)
+                        .or_default()
+                        .insert(0, "CJKFont".to_owned());
+
+                    log::info!("Loaded CJK font from: {}", font_path);
+                    font_loaded = true;
                     break;
                 }
             }
-        }
 
+            if !font_loaded {
+                log::warn!("Could not load any CJK fonts on Linux. Chinese characters may not display correctly.");
+            }
+        }
 
         ctx.set_fonts(fonts);
     }
@@ -316,7 +331,9 @@ impl TemplateApp {
             // Check if we have a match at this position
             let mut is_match = true;
             for (i, &search_char) in search_chars.iter().enumerate() {
-                if start_idx + i >= text_lower_chars.len() || text_lower_chars[start_idx + i] != search_char {
+                if start_idx + i >= text_lower_chars.len()
+                    || text_lower_chars[start_idx + i] != search_char
+                {
                     is_match = false;
                     break;
                 }
@@ -376,14 +393,15 @@ impl TemplateApp {
                 Ok(roles) => {
                     self.available_roles = roles;
                     // Set default role to the first one if no role is selected
-                    if self.current_assistant_role_id.is_none() && !self.available_roles.is_empty() {
+                    if self.current_assistant_role_id.is_none() && !self.available_roles.is_empty()
+                    {
                         self.current_assistant_role_id = Some(self.available_roles[0].0);
                         self.temp_assistant_role_id = Some(self.available_roles[0].0);
                         self.load_system_prompts_for_current_role();
                     }
                 }
                 Err(e) => {
-                    log::error!("Failed to load assistant roles: {}", e);
+                    log::error!("Failed to load assistant roles: {e}");
                 }
             }
         }
@@ -396,30 +414,30 @@ impl TemplateApp {
                     self.current_system_prompts = prompts;
                 }
                 Err(e) => {
-                    log::error!("Failed to load system prompts for role {}: {}", role_id, e);
+                    log::error!("Failed to load system prompts for role {role_id}: {e}");
                 }
             }
         }
     }
 
-    pub fn add_to_digest(&mut self, content: String, source: String) {
+    pub fn add_to_digest(&mut self, content: &str, source: &str) {
         use std::time::{SystemTime, UNIX_EPOCH};
 
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("Time went backwards")
             .as_secs();
 
-        let id = format!("{}_{}", source, timestamp);
+        let id = format!("{source}_{timestamp}");
         let formatted_time = chrono::DateTime::from_timestamp(timestamp as i64, 0)
-            .unwrap_or_else(|| chrono::Utc::now())
+            .unwrap_or_else(chrono::Utc::now)
             .format("%H:%M")
             .to_string();
 
         let digest_item = DigestItem {
             id,
-            content: content.clone(),
-            source: source.clone(),
+            content: content.to_owned(),
+            source: source.to_owned(),
             timestamp: formatted_time.clone(),
             selected: true, // Default to selected when adding new items
         };
@@ -429,35 +447,35 @@ impl TemplateApp {
         // Auto-save to database
         if let Some(ref db) = self.database {
             if let Err(e) = db.save_content(
-                &content,
-                &source,
+                content,
+                source,
                 timestamp as i64,
                 &formatted_time,
                 &["digest"],
             ) {
-                log::error!("Failed to save digest item to database: {}", e);
+                log::error!("Failed to save digest item to database: {e}");
             }
         }
     }
 
-    pub fn add_to_long_term_memory(&mut self, content: String, source: String) {
+    pub fn add_to_long_term_memory(&mut self, content: &str, source: &str) {
         use std::time::{SystemTime, UNIX_EPOCH};
 
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("Time went backwards")
             .as_secs();
 
-        let id = format!("{}_{}", source, timestamp);
+        let id = format!("{source}_{timestamp}");
         let formatted_time = chrono::DateTime::from_timestamp(timestamp as i64, 0)
-            .unwrap_or_else(|| chrono::Utc::now())
+            .unwrap_or_else(chrono::Utc::now)
             .format("%H:%M")
             .to_string();
 
         let memory_item = LongTermMemoryItem {
             id,
-            content: content.clone(),
-            source: source.clone(),
+            content: content.to_owned(),
+            source: source.to_owned(),
             timestamp: formatted_time.clone(),
             selected: true, // Default to selected when adding new items
         };
@@ -467,13 +485,13 @@ impl TemplateApp {
         // Auto-save to database
         if let Some(ref db) = self.database {
             if let Err(e) = db.save_content(
-                &content,
-                &source,
+                content,
+                source,
                 timestamp as i64,
                 &formatted_time,
                 &["longterm"],
             ) {
-                log::error!("Failed to save longterm memory item to database: {}", e);
+                log::error!("Failed to save longterm memory item to database: {e}");
             }
         }
     }
@@ -483,11 +501,11 @@ impl TemplateApp {
 
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("Time went backwards")
             .as_secs();
 
         let formatted_time = chrono::DateTime::from_timestamp(timestamp as i64, 0)
-            .unwrap_or_else(|| chrono::Utc::now())
+            .unwrap_or_else(chrono::Utc::now)
             .format("%H:%M")
             .to_string();
 
@@ -500,7 +518,7 @@ impl TemplateApp {
                 &formatted_time,
                 &["chat"],
             ) {
-                log::error!("Failed to save chat message to database: {}", e);
+                log::error!("Failed to save chat message to database: {e}");
             }
         }
     }
@@ -517,7 +535,7 @@ impl TemplateApp {
                     );
                 }
                 Err(e) => {
-                    log::error!("Failed to load chat messages from database: {}", e);
+                    log::error!("Failed to load chat messages from database: {e}");
                 }
             }
 
@@ -531,7 +549,7 @@ impl TemplateApp {
                     );
                 }
                 Err(e) => {
-                    log::error!("Failed to load digest items from database: {}", e);
+                    log::error!("Failed to load digest items from database: {e}");
                 }
             }
 
@@ -545,7 +563,7 @@ impl TemplateApp {
                     );
                 }
                 Err(e) => {
-                    log::error!("Failed to load long-term memory items from database: {}", e);
+                    log::error!("Failed to load long-term memory items from database: {e}");
                 }
             }
 
@@ -553,16 +571,15 @@ impl TemplateApp {
             match db.get_database_stats() {
                 Ok((total_content, chat_count, digest_count, longterm_count)) => {
                     self.info_text = format!(
-                        "Database loaded successfully!\nTotal unique content items: {}\nChat messages: {}\nDigest items: {}\nLong-term memory items: {}",
-                        total_content, chat_count, digest_count, longterm_count
+                        "Database loaded successfully!\nTotal unique content items: {total_content}\nChat messages: {chat_count}\nDigest items: {digest_count}\nLong-term memory items: {longterm_count}"
                     );
                 }
                 Err(e) => {
-                    log::error!("Failed to get database stats: {}", e);
+                    log::error!("Failed to get database stats: {e}");
                 }
             }
         } else {
-            self.info_text = "Database not available. Cannot load data.".to_string();
+            self.info_text = "Database not available. Cannot load data.".to_owned();
             log::error!("Database not initialized. Cannot load data.");
         }
     }
@@ -572,14 +589,15 @@ impl TemplateApp {
         export_text.push_str("# Digested Content Export\n\n");
 
         for (i, item) in self.digest_items.iter().enumerate() {
+            let source_label = if item.source == "user" {
+                "You"
+            } else {
+                "Assistant"
+            };
             export_text.push_str(&format!(
                 "## Item {} - {} ({})\n\n",
                 i + 1,
-                if item.source == "user" {
-                    "You"
-                } else {
-                    "Assistant"
-                },
+                source_label,
                 item.timestamp
             ));
             export_text.push_str(&item.content);
@@ -587,7 +605,8 @@ impl TemplateApp {
             export_text.push_str("---\n\n");
         }
 
-        export_text.push_str(&format!("*Exported {} items*", self.digest_items.len()));
+        let item_count = self.digest_items.len();
+        export_text.push_str(&format!("*Exported {item_count} items*"));
         export_text
     }
 
@@ -596,14 +615,15 @@ impl TemplateApp {
         export_text.push_str("# Long Term Memory Export\n\n");
 
         for (i, item) in self.long_term_memory_items.iter().enumerate() {
+            let source_label = if item.source == "user" {
+                "You"
+            } else {
+                "Assistant"
+            };
             export_text.push_str(&format!(
                 "## Item {} - {} ({})\n\n",
                 i + 1,
-                if item.source == "user" {
-                    "You"
-                } else {
-                    "Assistant"
-                },
+                source_label,
                 item.timestamp
             ));
             export_text.push_str(&item.content);
@@ -611,10 +631,8 @@ impl TemplateApp {
             export_text.push_str("---\n\n");
         }
 
-        export_text.push_str(&format!(
-            "*Exported {} items*",
-            self.long_term_memory_items.len()
-        ));
+        let item_count = self.long_term_memory_items.len();
+        export_text.push_str(&format!("*Exported {item_count} items*"));
         export_text
     }
 
@@ -635,16 +653,16 @@ impl TemplateApp {
             .push_str("Please provide a comprehensive summary of the following digest items:\n\n");
 
         for (i, item) in selected_items.iter().enumerate() {
+            let num = i + 1;
+            let source_label = if item.source == "user" {
+                "User"
+            } else {
+                "Assistant"
+            };
+            let timestamp = &item.timestamp;
+            let content = &item.content;
             content_to_summarize.push_str(&format!(
-                "{}. {} ({}):\n{}\n\n",
-                i + 1,
-                if item.source == "user" {
-                    "User"
-                } else {
-                    "Assistant"
-                },
-                item.timestamp,
-                item.content
+                "{num}. {source_label} ({timestamp}):\n{content}\n\n"
             ));
         }
 
@@ -652,13 +670,13 @@ impl TemplateApp {
 
         // Add user message for summary request to chat history
         self.chat_messages.push(ChatMessage {
-            role: "user".to_string(),
+            role: "user".to_owned(),
             content: content_to_summarize.clone(),
         });
 
         // Add placeholder for assistant response
         self.chat_messages.push(ChatMessage {
-            role: "assistant".to_string(),
+            role: "assistant".to_owned(),
             content: String::new(),
         });
 
@@ -687,16 +705,16 @@ impl TemplateApp {
         );
 
         for (i, item) in selected_items.iter().enumerate() {
+            let num = i + 1;
+            let source_label = if item.source == "user" {
+                "User"
+            } else {
+                "Assistant"
+            };
+            let timestamp = &item.timestamp;
+            let content = &item.content;
             content_to_summarize.push_str(&format!(
-                "{}. {} ({}):\n{}\n\n",
-                i + 1,
-                if item.source == "user" {
-                    "User"
-                } else {
-                    "Assistant"
-                },
-                item.timestamp,
-                item.content
+                "{num}. {source_label} ({timestamp}):\n{content}\n\n"
             ));
         }
 
@@ -704,13 +722,13 @@ impl TemplateApp {
 
         // Add user message for summary request
         self.chat_messages.push(ChatMessage {
-            role: "user".to_string(),
+            role: "user".to_owned(),
             content: content_to_summarize.clone(),
         });
 
         // Add placeholder for assistant response
         self.chat_messages.push(ChatMessage {
-            role: "assistant".to_string(),
+            role: "assistant".to_owned(),
             content: String::new(),
         });
 
@@ -725,7 +743,12 @@ impl TemplateApp {
         self.send_to_api_with_panel("chat", ctx);
     }
 
-    fn send_summary_to_api(&mut self, panel_type: &str, summary_content: String, ctx: &egui::Context) {
+    fn send_summary_to_api(
+        &mut self,
+        panel_type: &str,
+        summary_content: String,
+        ctx: &egui::Context,
+    ) {
         let api_base_url = self.api_base_url.clone();
         let api_key = self.api_key.clone();
         let model = self.model.clone();
@@ -737,7 +760,7 @@ impl TemplateApp {
 
         tokio::spawn(async move {
             let client = reqwest::Client::new();
-            let api_url = format!("{}/chat/completions", api_base_url);
+            let api_url = format!("{api_base_url}/chat/completions");
 
             let mut api_messages = Vec::new();
 
@@ -764,12 +787,16 @@ impl TemplateApp {
 
             // Debug: Print the HTTP body being sent to LLM
             println!("🔍 DEBUG - Summary HTTP Body sent to LLM API:");
-            println!("{}", serde_json::to_string_pretty(&payload).unwrap_or_else(|_| "Failed to serialize payload".to_string()));
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&payload)
+                    .unwrap_or_else(|_| "Failed to serialize payload".to_owned())
+            );
             println!("─────────────────────────────────────");
 
             match client
                 .post(&api_url)
-                .header("Authorization", format!("Bearer {}", api_key))
+                .header("Authorization", format!("Bearer {api_key}"))
                 .header("Content-Type", "application/json")
                 .json(&payload)
                 .send()
@@ -788,23 +815,29 @@ impl TemplateApp {
 
                                     // Process complete lines
                                     while let Some(line_end) = buffer.find('\n') {
-                                        let line = buffer[..line_end].trim().to_string();
-                                        buffer = buffer[line_end + 1..].to_string();
+                                        let line = buffer[..line_end].trim().to_owned();
+                                        buffer = buffer[line_end + 1..].to_owned();
 
-                                        if line.starts_with("data: ") {
-                                            let data = &line[6..];
+                                        if let Some(data) = line.strip_prefix("data: ") {
                                             if data == "[DONE]" {
-                                                let _ = tx.send("__STREAM_END__".to_string());
+                                                _ = tx.send("__STREAM_END__".to_owned());
                                                 ctx_clone.request_repaint();
                                                 return;
                                             }
 
-                                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
+                                            if let Ok(json) =
+                                                serde_json::from_str::<serde_json::Value>(data)
+                                            {
                                                 if let Some(choices) = json["choices"].as_array() {
                                                     if let Some(choice) = choices.first() {
-                                                        if let Some(delta) = choice["delta"].as_object() {
-                                                            if let Some(content) = delta["content"].as_str() {
-                                                                let _ = tx.send(content.to_string());
+                                                        if let Some(delta) =
+                                                            choice["delta"].as_object()
+                                                        {
+                                                            if let Some(content) =
+                                                                delta["content"].as_str()
+                                                            {
+                                                                _ =
+                                                                    tx.send(content.to_owned());
                                                                 ctx_clone.request_repaint();
                                                             }
                                                         }
@@ -818,20 +851,22 @@ impl TemplateApp {
                             }
                         }
                     } else {
-                        let error_msg = format!("HTTP error: {}", resp.status());
-                        let _ = tx.send(error_msg);
+                        let status = resp.status();
+                        let error_msg = format!("HTTP error: {status}");
+                        _ = tx.send(error_msg);
                         ctx_clone.request_repaint();
                     }
                 }
                 Err(e) => {
-                    let error_msg = format!("Connection error: {}", e);
-                    let _ = tx.send(error_msg);
+                    let error_msg = format!("Connection error: {e}");
+                    _ = tx.send(error_msg);
                     ctx_clone.request_repaint();
                 }
             }
         });
     }
 
+    #[expect(clippy::too_many_lines)]
     fn send_to_api_with_panel(&mut self, panel_type: &str, ctx: &egui::Context) {
         let api_base_url = self.api_base_url.clone();
         let api_key = self.api_key.clone();
@@ -845,7 +880,7 @@ impl TemplateApp {
 
         tokio::spawn(async move {
             let client = reqwest::Client::new();
-            let api_url = format!("{}/chat/completions", api_base_url);
+            let api_url = format!("{api_base_url}/chat/completions");
 
             let mut api_messages = Vec::new();
 
@@ -876,12 +911,16 @@ impl TemplateApp {
 
             // Debug: Print the HTTP body being sent to LLM
             println!("🔍 DEBUG - HTTP Body sent to LLM API:");
-            println!("{}", serde_json::to_string_pretty(&payload).unwrap_or_else(|_| "Failed to serialize payload".to_string()));
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&payload)
+                    .unwrap_or_else(|_| "Failed to serialize payload".to_owned())
+            );
             println!("─────────────────────────────────────");
 
             match client
                 .post(&api_url)
-                .header("Authorization", format!("Bearer {}", api_key))
+                .header("Authorization", format!("Bearer {api_key}"))
                 .header("Content-Type", "application/json")
                 .json(&payload)
                 .send()
@@ -899,16 +938,15 @@ impl TemplateApp {
                                     buffer.push_str(&chunk_str);
 
                                     let lines: Vec<String> =
-                                        buffer.split('\n').map(|s| s.to_string()).collect();
+                                        buffer.split('\n').map(|s| s.to_owned()).collect();
                                     let processed_lines: Vec<String> =
                                         lines[..lines.len().saturating_sub(1)].to_vec();
                                     buffer = lines.last().cloned().unwrap_or_default();
 
                                     for line in processed_lines {
-                                        if line.starts_with("data: ") {
-                                            let data = &line[6..];
+                                        if let Some(data) = line.strip_prefix("data: ") {
                                             if data == "[DONE]" {
-                                                let _ = tx.send("__STREAM_END__".to_string());
+                                                _ = tx.send("__STREAM_END__".to_owned());
                                                 ctx_clone.request_repaint();
                                                 return;
                                             }
@@ -924,20 +962,13 @@ impl TemplateApp {
                                                             if let Some(content) =
                                                                 delta["content"].as_str()
                                                             {
-                                                                if let Err(_e) =
-                                                                    tx.send(content.to_string())
-                                                                {
-                                                                } else {
-                                                                }
+                                                                _ =
+                                                                    tx.send(content.to_owned());
                                                                 ctx_clone.request_repaint();
                                                             }
                                                         }
-                                                        
                                                     }
-                                                    
-                                                    
                                                 }
-                                                
                                             }
                                         }
                                     }
@@ -949,14 +980,14 @@ impl TemplateApp {
                         let status = resp.status();
                         let error_body = match resp.text().await {
                             Ok(body) => body,
-                            Err(_) => "Unknown error".to_string(),
+                            Err(_) => "Unknown error".to_owned(),
                         };
-                        let _ = tx.send(format!("Error: HTTP {} - {}", status, error_body));
+                        _ = tx.send(format!("Error: HTTP {status} - {error_body}"));
                         ctx_clone.request_repaint();
                     }
                 }
                 Err(e) => {
-                    let _ = tx.send(format!("Connection error: {}", e));
+                    _ = tx.send(format!("Connection error: {e}"));
                     ctx_clone.request_repaint();
                 }
             }
@@ -971,6 +1002,7 @@ impl eframe::App for TemplateApp {
     }
 
     /// Called each time the UI needs repainting, which may be many times per second.
+    #[expect(clippy::too_many_lines)]
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Handle streaming responses
         if let Some(receiver) = &self.streaming_receiver {
@@ -1004,13 +1036,12 @@ impl eframe::App for TemplateApp {
                             break;
                         } else if content.is_empty() {
                             // Empty content can be part of streaming, don't close
-                            continue;
                         } else if content.starts_with("Error:")
                             || content.starts_with("Connection error:")
                         {
                             // Handle errors
                             self.last_error = Some(content.clone());
-                            self.current_response = format!("❌ {}", content);
+                            self.current_response = format!("❌ {content}");
                             self.streaming_receiver = None;
                             self.is_waiting_response = false;
                             break;
@@ -1078,30 +1109,28 @@ impl eframe::App for TemplateApp {
 
                     // Handle Enter key press and focus requests
                     if input_response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))
-                    {
-                        if !self.chat_input.trim().is_empty() && !self.is_waiting_response {
-                            // Send message logic here
-                            let user_message = ChatMessage {
-                                role: "user".to_string(),
-                                content: self.chat_input.clone(),
-                            };
-                            self.save_chat_message_to_db(&user_message);
-                            self.chat_messages.push(user_message);
+                        && !self.chat_input.trim().is_empty() && !self.is_waiting_response {
+                        // Send message logic here
+                        let user_message = ChatMessage {
+                            role: "user".to_owned(),
+                            content: self.chat_input.clone(),
+                        };
+                        self.save_chat_message_to_db(&user_message);
+                        self.chat_messages.push(user_message);
 
-                            // Add placeholder for assistant response
-                            self.chat_messages.push(ChatMessage {
-                                role: "assistant".to_string(),
-                                content: String::new(),
-                            });
+                        // Add placeholder for assistant response
+                        self.chat_messages.push(ChatMessage {
+                            role: "assistant".to_owned(),
+                            content: String::new(),
+                        });
 
-                            self.is_waiting_response = true;
-                            self.current_response.clear();
+                        self.is_waiting_response = true;
+                        self.current_response.clear();
 
-                            self.send_to_api(ctx);
-                            self.chat_input.clear();
-                            self.should_focus_input = true;
-                            self.should_scroll_chat = true;
-                        }
+                        self.send_to_api(ctx);
+                        self.chat_input.clear();
+                        self.should_focus_input = true;
+                        self.should_scroll_chat = true;
                     }
 
                     // Handle focus requests
@@ -1115,30 +1144,28 @@ impl eframe::App for TemplateApp {
                     if ui
                         .add_enabled(send_enabled, egui::Button::new("Send"))
                         .clicked()
-                    {
-                        if !self.chat_input.trim().is_empty() && !self.is_waiting_response {
-                            // Same send logic as Enter key
-                            let user_message = ChatMessage {
-                                role: "user".to_string(),
-                                content: self.chat_input.clone(),
-                            };
-                            self.save_chat_message_to_db(&user_message);
-                            self.chat_messages.push(user_message);
+                        && !self.chat_input.trim().is_empty() && !self.is_waiting_response {
+                        // Same send logic as Enter key
+                        let user_message = ChatMessage {
+                            role: "user".to_owned(),
+                            content: self.chat_input.clone(),
+                        };
+                        self.save_chat_message_to_db(&user_message);
+                        self.chat_messages.push(user_message);
 
-                            // Add placeholder for assistant response
-                            self.chat_messages.push(ChatMessage {
-                                role: "assistant".to_string(),
-                                content: String::new(),
-                            });
+                        // Add placeholder for assistant response
+                        self.chat_messages.push(ChatMessage {
+                            role: "assistant".to_owned(),
+                            content: String::new(),
+                        });
 
-                            self.is_waiting_response = true;
-                            self.current_response.clear();
+                        self.is_waiting_response = true;
+                        self.current_response.clear();
 
-                            self.send_to_api(ctx);
-                            self.chat_input.clear();
-                            self.should_focus_input = true;
-                            self.should_scroll_chat = true;
-                        }
+                        self.send_to_api(ctx);
+                        self.chat_input.clear();
+                        self.should_focus_input = true;
+                        self.should_scroll_chat = true;
                     }
                 });
 
@@ -1146,9 +1173,11 @@ impl eframe::App for TemplateApp {
                 ui.separator();
                 ui.horizontal(|ui| {
                     if let Some(role_id) = self.current_assistant_role_id {
-                        if let Some((_, _, display_name, _)) = self.available_roles
+                        if let Some((_, _, display_name, _)) = self
+                            .available_roles
                             .iter()
-                            .find(|(id, _, _, _)| *id == role_id) {
+                            .find(|(id, _, _, _)| *id == role_id)
+                        {
                             // Clone available roles to avoid borrowing issues
                             let available_roles = self.available_roles.clone();
                             let current_role_id = self.current_assistant_role_id;
@@ -1156,13 +1185,22 @@ impl eframe::App for TemplateApp {
                             // Use ComboBox for role selection
                             let mut role_changed = None;
                             // ui.label(egui::RichText::new(egui_phosphor::regular::USER_LIST).size(32.0));
+                            let user_list_icon = egui_phosphor::regular::USER_LIST;
                             egui::ComboBox::from_id_salt("role_selector")
                                 // .on_hover_text("Select Assistant Role")
-                                .selected_text(format!("👥 {} {}", display_name, egui_phosphor::regular::USER_LIST))
+                                .selected_text(format!("👥 {display_name} {user_list_icon}"))
                                 .show_ui(ui, |ui| {
-                                    for (available_role_id, _role_name, available_display_name, description) in &available_roles {
-                                        let is_selected = current_role_id == Some(*available_role_id);
-                                        let response = ui.selectable_label(is_selected, available_display_name);
+                                    for (
+                                        available_role_id,
+                                        _role_name,
+                                        available_display_name,
+                                        description,
+                                    ) in &available_roles
+                                    {
+                                        let is_selected =
+                                            current_role_id == Some(*available_role_id);
+                                        let response = ui
+                                            .selectable_label(is_selected, available_display_name);
                                         if response.clicked() && !is_selected {
                                             role_changed = Some(*available_role_id);
                                         }
@@ -1183,12 +1221,19 @@ impl eframe::App for TemplateApp {
                                 .corner_radius(6.0)
                                 .inner_margin(egui::Margin::symmetric(8, 4));
                             frame.show(ui, |ui| {
-                                ui.colored_label(egui::Color32::from_rgb(204, 0, 0), "👤 Unknown Role");
+                                ui.colored_label(
+                                    egui::Color32::from_rgb(204, 0, 0),
+                                    "👤 Unknown Role",
+                                );
                             });
                         }
 
                         // Add reload button (enabled when role is selected)
-                        if ui.small_button("🔄 Reload").on_hover_text("Reload system prompts from database").clicked() {
+                        if ui
+                            .small_button("🔄 Reload")
+                            .on_hover_text("Reload system prompts from database")
+                            .clicked()
+                        {
                             self.load_system_prompts_for_current_role();
                         }
                     } else {
@@ -1199,8 +1244,15 @@ impl eframe::App for TemplateApp {
                         egui::ComboBox::from_id_salt("role_selector_empty")
                             .selected_text("👤 No Role Selected")
                             .show_ui(ui, |ui| {
-                                for (available_role_id, _role_name, available_display_name, description) in &available_roles {
-                                    let response = ui.selectable_label(false, available_display_name);
+                                for (
+                                    available_role_id,
+                                    _role_name,
+                                    available_display_name,
+                                    description,
+                                ) in &available_roles
+                                {
+                                    let response =
+                                        ui.selectable_label(false, available_display_name);
                                     if response.clicked() {
                                         role_changed = Some(*available_role_id);
                                     }
@@ -1261,15 +1313,17 @@ impl eframe::App for TemplateApp {
                                 .iter()
                                 .find(|(id, _, _, _)| *id == role_id)
                                 .map(|(_, _, display_name, _)| display_name.clone())
-                                .unwrap_or_else(|| "Unknown Role".to_string())
+                                .unwrap_or_else(|| "Unknown Role".to_owned())
                         } else {
-                            "No Role Selected".to_string()
+                            "No Role Selected".to_owned()
                         };
 
                         egui::ComboBox::from_label("")
                             .selected_text(current_role_name)
                             .show_ui(ui, |ui| {
-                                for (role_id, _role_name, display_name, description) in &self.available_roles {
+                                for (role_id, _role_name, display_name, description) in
+                                    &self.available_roles
+                                {
                                     let is_selected = self.temp_assistant_role_id == Some(*role_id);
                                     let response = ui.selectable_label(is_selected, display_name);
                                     if response.clicked() {
@@ -1284,9 +1338,11 @@ impl eframe::App for TemplateApp {
 
                     // Show current role description if available
                     if let Some(role_id) = self.temp_assistant_role_id {
-                        if let Some((_, _, _, description)) = self.available_roles
+                        if let Some((_, _, _, description)) = self
+                            .available_roles
                             .iter()
-                            .find(|(id, _, _, _)| *id == role_id) {
+                            .find(|(id, _, _, _)| *id == role_id)
+                        {
                             ui.colored_label(egui::Color32::GRAY, description);
                         }
                     }
@@ -1338,13 +1394,13 @@ impl eframe::App for TemplateApp {
 
         // Process all actions from both panels
         for (content, source) in digest_actions {
-            self.add_to_digest(content, source);
+            self.add_to_digest(&content, &source);
         }
         for (content, source) in memory_actions_from_chat {
-            self.add_to_long_term_memory(content, source);
+            self.add_to_long_term_memory(&content, &source);
         }
         for (content, source) in memory_actions_from_digest {
-            self.add_to_long_term_memory(content, source);
+            self.add_to_long_term_memory(&content, &source);
         }
     }
 }
