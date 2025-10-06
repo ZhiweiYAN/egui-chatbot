@@ -97,6 +97,10 @@ pub struct TemplateApp {
     #[serde(skip)]
     pub temp_model: String,
 
+    // Color test window
+    #[serde(skip)]
+    pub show_color_test: bool,
+
     // Assistant role management
     #[serde(skip)]
     pub current_assistant_role_id: Option<i64>,
@@ -106,6 +110,10 @@ pub struct TemplateApp {
     pub available_roles: Vec<(i64, String, String, String)>, // (id, role_name, display_name, description)
     #[serde(skip)]
     pub current_system_prompts: std::collections::HashMap<String, String>, // panel_type -> prompt_text
+    #[serde(skip)]
+    pub is_reloading_prompts: bool,
+    #[serde(skip)]
+    pub reload_start_time: Option<std::time::Instant>,
 }
 
 impl Default for TemplateApp {
@@ -162,11 +170,16 @@ impl Default for TemplateApp {
             temp_model: std::env::var("LLM_MODEL")
                 .unwrap_or_else(|_| "deepseek-chat".to_owned()),
 
+            // Color test window
+            show_color_test: false,
+
             // Assistant role management
             current_assistant_role_id: None,
             temp_assistant_role_id: None,
             available_roles: Vec::new(),
             current_system_prompts: std::collections::HashMap::new(),
+            is_reloading_prompts: false,
+            reload_start_time: None,
         }
     }
 }
@@ -210,6 +223,7 @@ impl TemplateApp {
         let mut fonts = egui::FontDefinitions::default();
 
         egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
+        egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Fill);
         // Try to load system fonts that support Chinese characters
         // Priority order: Microsoft YaHei, SimHei, Noto Sans CJK, fallback to built-in fonts
 
@@ -290,7 +304,7 @@ impl TemplateApp {
                         .or_default()
                         .insert(0, "CJKFont".to_owned());
 
-                    log::info!("Loaded CJK font from: {}", font_path);
+                    log::info!("Loaded CJK font from: {font_path}");
                     font_loaded = true;
                     break;
                 }
@@ -1081,10 +1095,15 @@ impl eframe::App for TemplateApp {
                             self.show_settings = true;
                         }
                         ui.separator();
-                        if ui.button("Quit").clicked() {
-                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                        if ui.button("🎨 Color Test").clicked() {
+                            self.show_color_test = true;
                         }
                     });
+
+                    if ui.button("Quit").clicked() {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
+
                     ui.add_space(16.0);
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -1100,8 +1119,11 @@ impl eframe::App for TemplateApp {
             .show(ctx, |ui| {
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
+                    // Add prompt indicator with phosphor icon (fill variant, enlarged)
+                    ui.label(egui::RichText::new(egui_phosphor::fill::CARET_LINE_RIGHT).color(egui::Color32::from_rgb(0x8E, 0x94, 0x9B)).size(18.0));
+
                     let input_response = ui.add_sized(
-                        [ui.available_width() - 70.0, 25.0],
+                        [ui.available_width() - 85.0, 25.0],
                         egui::TextEdit::singleline(&mut self.chat_input)
                             .hint_text("Type your message... (输入你的消息...)")
                             .font(egui::TextStyle::Body),
@@ -1186,10 +1208,17 @@ impl eframe::App for TemplateApp {
                             let mut role_changed = None;
                             // ui.label(egui::RichText::new(egui_phosphor::regular::USER_LIST).size(32.0));
                             let user_list_icon = egui_phosphor::regular::USER_LIST;
-                            egui::ComboBox::from_id_salt("role_selector")
-                                // .on_hover_text("Select Assistant Role")
-                                .selected_text(format!("👥 {display_name} {user_list_icon}"))
-                                .show_ui(ui, |ui| {
+
+                            // Scope the style change to only affect the ComboBox button
+                            ui.scope(|ui| {
+                                // Override button style with accent blue background
+                                ui.style_mut().visuals.widgets.inactive.weak_bg_fill = egui::Color32::from_rgb(0xC2, 0xDE, 0xFF);
+                               // ui.style_mut().visuals.widgets.hovered.weak_bg_fill = egui::Color32::from_rgb(0xC2, 0xDE, 0xFF);
+                               // ui.style_mut().visuals.widgets.active.weak_bg_fill = egui::Color32::from_rgb(0xC2, 0xDE, 0xFF);
+
+                                egui::ComboBox::from_id_salt("role_selector")
+                                    .selected_text(format!("👥 {display_name} {user_list_icon}"))
+                                    .show_ui(ui, |ui| {
                                     for (
                                         available_role_id,
                                         _role_name,
@@ -1209,6 +1238,7 @@ impl eframe::App for TemplateApp {
                                         }
                                     }
                                 });
+                            });
 
                             // Apply role change after the closure
                             if let Some(new_role_id) = role_changed {
@@ -1229,21 +1259,45 @@ impl eframe::App for TemplateApp {
                         }
 
                         // Add reload button (enabled when role is selected)
-                        if ui
-                            .small_button("🔄 Reload")
-                            .on_hover_text("Reload system prompts from database")
-                            .clicked()
-                        {
-                            self.load_system_prompts_for_current_role();
+                        if !self.is_reloading_prompts {
+                            if ui
+                                .small_button("🔄 Reload")
+                                .on_hover_text("Reload system prompts from database")
+                                .clicked()
+                            {
+                                self.is_reloading_prompts = true;
+                                self.reload_start_time = Some(std::time::Instant::now());
+                                self.load_system_prompts_for_current_role();
+                                ctx.request_repaint(); // Keep repainting to show progress bar
+                            }
+                        } else {
+                            ui.add(egui::ProgressBar::new(0.5).animate(true).desired_width(60.0));
+
+                            // Check if at least 0.5 seconds have passed
+                            if let Some(start_time) = self.reload_start_time {
+                                if start_time.elapsed() >= std::time::Duration::from_millis(500) {
+                                    self.is_reloading_prompts = false;
+                                    self.reload_start_time = None;
+                                } else {
+                                    ctx.request_repaint(); // Continue animation
+                                }
+                            }
                         }
                     } else {
                         // Show role selector even when no role is selected
                         let available_roles = self.available_roles.clone();
                         let mut role_changed = None;
 
-                        egui::ComboBox::from_id_salt("role_selector_empty")
-                            .selected_text("👤 No Role Selected")
-                            .show_ui(ui, |ui| {
+                        // Scope the style change to only affect the ComboBox button
+                        ui.scope(|ui| {
+                            // Override button style with accent blue background
+                            ui.style_mut().visuals.widgets.inactive.weak_bg_fill = egui::Color32::from_rgb(0xC2, 0xDE, 0xFF);
+                            //ui.style_mut().visuals.widgets.hovered.weak_bg_fill = egui::Color32::from_rgb(0xC2, 0xDE, 0xFF);
+                            //ui.style_mut().visuals.widgets.active.weak_bg_fill = egui::Color32::from_rgb(0xC2, 0xDE, 0xFF);
+
+                            egui::ComboBox::from_id_salt("role_selector_empty")
+                                .selected_text("👤 No Role Selected")
+                                .show_ui(ui, |ui| {
                                 for (
                                     available_role_id,
                                     _role_name,
@@ -1261,6 +1315,7 @@ impl eframe::App for TemplateApp {
                                     }
                                 }
                             });
+                        });
 
                         // Apply role change after the closure
                         if let Some(new_role_id) = role_changed {
@@ -1275,15 +1330,22 @@ impl eframe::App for TemplateApp {
                 });
             });
 
+        // Show color test window if requested
+        if self.show_color_test {
+            crate::color_test::show_color_test_window(ctx, &mut self.show_color_test);
+        }
+
         // Show settings window if requested
-        if self.show_settings {
+        let mut show_settings = self.show_settings;
+        if show_settings {
             egui::Window::new("Settings")
-                .collapsible(false)
+                .open(&mut show_settings)
                 .resizable(true)
                 .default_width(400.0)
                 .show(ctx, |ui| {
-                    ui.heading("LLM Configuration");
-                    ui.separator();
+                    egui::CollapsingHeader::new("LLM Configuration")
+                        .default_open(true)
+                        .show(ui, |ui| {
 
                     ui.horizontal(|ui| {
                         ui.label("Base URL:");
@@ -1299,10 +1361,13 @@ impl eframe::App for TemplateApp {
                         ui.label("Model:");
                         ui.text_edit_singleline(&mut self.temp_model);
                     });
+                        });
 
                     ui.separator();
-                    ui.heading("Assistant Role");
-                    ui.separator();
+
+                    egui::CollapsingHeader::new("Assistant Role")
+                        .default_open(true)
+                        .show(ui, |ui| {
 
                     // Role selection dropdown
                     ui.horizontal(|ui| {
@@ -1346,10 +1411,13 @@ impl eframe::App for TemplateApp {
                             ui.colored_label(egui::Color32::GRAY, description);
                         }
                     }
+                        });
 
                     ui.separator();
-                    ui.heading("Database Information");
-                    ui.separator();
+
+                    egui::CollapsingHeader::new("Database Information")
+                        .default_open(true)
+                        .show(ui, |ui| {
 
                     // Display database path
                     ui.horizontal(|ui| {
@@ -1358,6 +1426,7 @@ impl eframe::App for TemplateApp {
                         ui.selectable_label(false, db_path.to_string_lossy().to_string())
                             .on_hover_text("Click to select and copy the database path");
                     });
+                        });
 
                     ui.separator();
                     ui.horizontal(|ui| {
@@ -1386,6 +1455,7 @@ impl eframe::App for TemplateApp {
                     });
                 });
         }
+        self.show_settings = show_settings;
 
         // Render the three panels using the separate modules
         let (digest_actions, memory_actions_from_chat) = self.render_chat_panel(ctx);

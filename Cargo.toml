@@ -46,7 +46,7 @@ chrono = { version = "0.4", features = ["serde"] }
 egui_commonmark = "0.21"
 
 # Icon font for UI icons
-egui-phosphor = "0.10"
+egui-phosphor = { version = "0.10", features = ["fill"] }
 
 # SQLite database for data persistence
 rusqlite = { version = "0.32", features = ["bundled"] }

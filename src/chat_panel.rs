@@ -116,19 +116,19 @@ impl TemplateApp {
                                                 egui::Layout::right_to_left(egui::Align::Center),
                                                 |ui| {
                                                     if ui
-                                                        .small_button("🗑")
+                                                        .small_button(egui::RichText::new("🗑").color(egui::Color32::from_rgb(0x8E, 0x94, 0x9B)))
                                                         .on_hover_text("Delete message")
                                                         .clicked()
                                                     {
                                                         message_to_delete = Some(i);
                                                     }
-                                                    if ui.small_button("🗄 Memory").clicked() {
+                                                    if ui.small_button(egui::RichText::new("🗄 Memory").color(egui::Color32::from_rgb(0x8E, 0x94, 0x9B))).clicked() {
                                                         memory_actions.push((
                                                             message_content.clone(),
                                                             message_role.clone(),
                                                         ));
                                                     }
-                                                    if ui.button("📌 Digest").clicked() {
+                                                    if ui.button(egui::RichText::new("📌 Digest").color(egui::Color32::from_rgb(0x8E, 0x94, 0x9B))).clicked() {
                                                         digest_actions.push((
                                                             message_content.clone(),
                                                             message_role.clone(),
@@ -175,20 +175,20 @@ impl TemplateApp {
                                                         ),
                                                         |ui| {
                                                             if ui
-                                                                .small_button("🗑")
+                                                                .small_button(egui::RichText::new("🗑").color(egui::Color32::from_rgb(0x8E, 0x94, 0x9B)))
                                                                 .on_hover_text("Delete message")
                                                                 .clicked()
                                                             {
                                                                 message_to_delete = Some(i);
                                                             }
-                                                            if ui.small_button("🗄 Memory").clicked()
+                                                            if ui.small_button(egui::RichText::new("🗄 Memory").color(egui::Color32::from_rgb(0x8E, 0x94, 0x9B))).clicked()
                                                             {
                                                                 memory_actions.push((
                                                                     self.current_response.clone(),
                                                                     "assistant".to_owned(),
                                                                 ));
                                                             }
-                                                            if ui.button("📌 Digest").clicked() {
+                                                            if ui.button(egui::RichText::new("📌 Digest").color(egui::Color32::from_rgb(0x8E, 0x94, 0x9B))).clicked() {
                                                                 digest_actions.push((
                                                                     self.current_response.clone(),
                                                                     "assistant".to_owned(),
@@ -230,20 +230,20 @@ impl TemplateApp {
                                                     ),
                                                     |ui| {
                                                         if ui
-                                                            .small_button("🗑")
+                                                            .small_button(egui::RichText::new("🗑").color(egui::Color32::from_rgb(0x8E, 0x94, 0x9B)))
                                                             .on_hover_text("Delete message")
                                                             .clicked()
                                                         {
                                                             message_to_delete = Some(i);
                                                         }
-                                                        if ui.small_button("🗄 Memory").clicked()
+                                                        if ui.small_button(egui::RichText::new("🗄 Memory").color(egui::Color32::from_rgb(0x8E, 0x94, 0x9B))).clicked()
                                                         {
                                                             memory_actions.push((
                                                                 message_content.clone(),
                                                                 message_role.clone(),
                                                             ));
                                                         }
-                                                        if ui.button("📌 Digest").clicked() {
+                                                        if ui.button(egui::RichText::new("📌 Digest").color(egui::Color32::from_rgb(0x8E, 0x94, 0x9B))).clicked() {
                                                             digest_actions.push((
                                                                 message_content.clone(),
                                                                 message_role.clone(),
